@@ -1,0 +1,71 @@
+**Nama Konsep:** **LinkSense AI** *(AI-Powered Universal Resource & Knowledge Hub with Smart Export)*
+
+**Ringkasan Produk**
+Platform kurasi dan manajemen aset digital berbasis web yang mengotomatisasi pengumpulan, pembacaan, dan pengkategorian berbagai jenis tautan (Google Drive, repositori GitHub, hingga artikel/situs web umum). Menggunakan kecerdasan buatan (LLM) dan integrasi API, sistem ini mengubah tautan mentah menjadi basis pengetahuan terstruktur yang dapat dicari secara kontekstual, difilter bertingkat, dan diekspor ke berbagai format dokumen kerja seperti Excel dan PDF dalam satu kali klik.
+
+---
+
+**Masalah yang Diselesaikan**
+Menyimpan tautan penting di *bookmark* peramban, aplikasi catatan, atau grup obrolan sering kali berujung pada tumpukan tautan pasif yang berantakan. Pengguna kerap lupa isi file di dalam folder Google Drive, fungsi spesifik dari sebuah repositori kode GitHub, atau ringkasan isi web tanpa harus membuka dan memeriksa tautan tersebut satu per satu secara manual.
+
+---
+
+**Fitur Utama**
+
+* **Universal Link Extraction & Platform Awareness:**
+* **Google Drive:** Mengekstrak struktur folder/subfolder, jenis berkas (dokumen, gambar, video, spreadsheet, arsip), ukuran, serta tanggal pembaruan melalui Google Drive API.
+* **GitHub Repositories:** Membaca nama repositori, deskripsi pembuat, bahasa pemrograman dominan, topik, dan file `README.md` via GitHub REST API.
+* **Situs Web Umum:** Melakukan *web scraping* otomatis untuk mengekstrak meta-tag, judul halaman, dan inti konten teks secara bersih.
+
+
+* **Hierarchical AI Categorization & Smart Tagging:**
+* **Klasifikasi Bertingkat:** Mengelompokkan data berdasarkan hirarki terstruktur: **Platform** *(GitHub/GDrive/Web)* $\rightarrow$ **Kategori Utama** *(Frontend, Dataset, Desain Aset, Edukasi)* $\rightarrow$ **Sub-Kategori / Use Case** *(UI Component Library, 3D Render Asset, REST API Template)*.
+* **Auto-Summary:** Menghasilkan 1–2 kalimat ringkas yang menjelaskan fungsi serta kegunaan tautan tersebut.
+* **Tag Otomatis:** Menyematkan kata kunci spesifik untuk memudahkan pengelompokan silang.
+
+
+* **Contextual Search & Multi-Level Filtering:**
+* Pengurutan dinamis berdasarkan nama (A–Z), tanggal input, ukuran berkas, atau tipe platform.
+* Pencarian cerdas berbasis kata kunci maupun maksud fungsional (misal: mencari *"komponen tailwind"* langsung menampilkan repositori UI yang relevan meskipun nama tautannya tidak mengandung kata tersebut).
+
+
+* **Smart Document Export:**
+* **Excel (`.xlsx`) & CSV:** Mengunduh database link ke dalam spreadsheet interaktif lengkap dengan kolom terpisah *(No, Nama, Platform, Kategori, Ringkasan, Tags, Hyperlink Aktif)* atau tab terpisah per platform.
+* **PDF Document:** Format katalog siap cetak atau dokumen laporan rapi dengan tata letak siap baca.
+
+
+
+---
+
+**Alur Kerja Pengguna**
+
+```text
+[Tempel Link URL] 
+       ↓ 
+[Ekstraksi Data Otomatis (API / Scraper)] 
+       ↓ 
+[Analisis & Kategorisasi AI (Gemini/LLM API)] 
+       ↓ 
+[Tampilan Dashboard: Filter & Pencarian Cerdas] 
+       ↓ 
+[Ekspor Data ke Excel / Dokumen]
+
+```
+
+---
+
+**Nilai Tambah (Value Proposition)**
+
+* **Otomasi Penuh:** Mengeliminasi kebutuhan menyalin-tempel judul, mengetik deskripsi, atau mengelompokkan folder secara manual.
+* **Aksesibilitas Informasi:** Memahami isi repositori GitHub atau folder Google Drive dalam hitungan detik tanpa harus mengunduh atau membuka banyak *tab* peramban.
+* **Portabilitas Data:** Menghubungkan manajemen tautan digital langsung ke alur kerja dokumentasi tim melalui ekspor spreadsheet instan.
+
+
+
+kalo misal aku buat web untuk baca apanama folder . cara kerjanya aku share link gdrive yang aku dapet(link file, filder atau apaun itu) nanti web itu bisa baca apanamnany (minimal)terus bnisa sort berdasarkan kategorinya terus bisa di serach juga nantinya bisa??
+
+terus fitur nya lagi web itu bisa engga baca link web apapun yang aku kasih (selain gdive, bisa web apapun) terus ai mengkategorikan menjadi ini web untukapa untyuk apa terus bisa di search juga gitu bisa engga kalo bisa gimana cara kerjanga kalo engga kenapa?
+
+dia bisa juga kan mengaktegorikan berdasarkan webnya. misal aku sharel link2 repo guthub yang berguna nah dia mengaktegorikan itu github kemudian kategorikan lagi ini repo apa ini reo apa dll bisa?
+
+aku mau juga bisa, ekxpor ke excel atau dokukmen gitu bisa engga?
