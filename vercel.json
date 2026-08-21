@@ -1,6 +1,12 @@
 {
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
+  "functions": {
+    "api/index.py": {
+      "includeFiles": "backend/**",
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
       "source": "/api/v1/:path*",
@@ -11,7 +17,7 @@
       "destination": "/api/index.py"
     },
     {
-      "source": "/((?!assets/|favicon.ico|.*\\..*).*)",
+      "source": "/((?!api/|health|assets/|favicon.ico|.*\\..*).*)",
       "destination": "/index.html"
     }
   ]

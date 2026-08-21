@@ -7,13 +7,13 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
     
-    # Database
+    # Database (Defaults to local SQLite, overridden by Supabase PostgreSQL in .env)
     DATABASE_URL: str = "sqlite+aiosqlite:///./linktrack.db"
     
     # AI Models (Gemini API)
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-3.7-flash"
-    GEMINI_FALLBACK_MODEL: str = "gemini-2.5-flash"
+    GEMINI_FALLBACK_MODEL: str = "gemini-3.5-flash-lite"
     
     # Optional API Keys
     GOOGLE_DRIVE_API_KEY: Optional[str] = None
