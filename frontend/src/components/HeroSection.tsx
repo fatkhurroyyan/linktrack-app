@@ -13,9 +13,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   onSelectPlatform,
   activePlatform,
 }) => {
-  const gdriveCount = stats?.platform_counts['Google Drive'] || 0;
-  const githubCount = stats?.platform_counts['GitHub'] || 0;
-  const webCount = stats?.platform_counts['Web'] || 0;
+  const gdriveCount = stats?.platform_counts?.['Google Drive'] || 0;
+  const githubCount = stats?.platform_counts?.['GitHub'] || 0;
+  const webCount = stats?.platform_counts?.['Web'] || 0;
   const totalCount = stats?.total_links || 0;
 
   return (

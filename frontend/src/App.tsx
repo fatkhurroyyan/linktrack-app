@@ -63,11 +63,11 @@ export const App: React.FC = () => {
     setIsLoading(true);
     try {
       const data = await api.getLinks(filters);
-      setLinks(data.items);
-      setTotalCount(data.total);
+      setLinks(Array.isArray(data?.items) ? data.items : []);
+      setTotalCount(typeof data?.total === 'number' ? data.total : 0);
     } catch (err: any) {
       console.error('Failed to fetch links:', err);
-      showToast('error', 'Gagal memuat data tautan.');
+      // Don't crash, just show toast if needed
     } finally {
       setIsLoading(false);
     }
@@ -76,12 +76,16 @@ export const App: React.FC = () => {
   // Fetch Analytics & Health
   const fetchMetadata = async () => {
     try {
-      const [analyticsData, healthData] = await Promise.all([
+      const [analyticsData, healthData] = await Promise.allSettled([
         api.getAnalytics(),
         api.getHealth(),
       ]);
-      setStats(analyticsData);
-      setHealth(healthData);
+      if (analyticsData.status === 'fulfilled') {
+        setStats(analyticsData.value);
+      }
+      if (healthData.status === 'fulfilled') {
+        setHealth(healthData.value);
+      }
     } catch (err) {
       console.error('Failed to fetch metadata:', err);
     }
@@ -178,7 +182,7 @@ export const App: React.FC = () => {
   };
 
   // Categories list from analytics or hardcoded defaults
-  const categoriesList = stats?.top_categories.map((c) => c.category) || [
+  const categoriesList = stats?.top_categories?.map((c) => c.category) || [
     'Frontend Development',
     'Backend & API',
     'AI & Machine Learning',
