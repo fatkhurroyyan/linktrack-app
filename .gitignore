@@ -11,6 +11,10 @@ frontend/.env
 frontend/.env.local
 frontend/.env.*.local
 
+# Log Percakapan AI (Private)
+log-percakapan-ai.md
+*.log.md
+
 # 2. Python & Backend
 __pycache__/
 *.py[cod]
