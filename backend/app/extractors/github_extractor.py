@@ -40,7 +40,7 @@ class GitHubExtractor(BaseExtractor):
         if settings.GITHUB_TOKEN:
             headers["Authorization"] = f"Bearer {settings.GITHUB_TOKEN}"
 
-        async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_SECONDS, follow_redirects=True) as client:
             # 1. Fetch Repository Metadata
             repo_api_url = f"https://api.github.com/repos/{owner}/{repo}"
             repo_resp = await client.get(repo_api_url, headers=headers)

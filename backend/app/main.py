@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database.session import init_db
 from app.api.routes_links import router as links_router
+from app.api.routes_categories import router as categories_router
 from app.api.routes_export import router as export_router
 from app.api.routes_analytics import router as analytics_router
 
@@ -31,6 +32,7 @@ app.add_middleware(
 
 # Register API Routers
 app.include_router(links_router, prefix=settings.API_V1_STR)
+app.include_router(categories_router, prefix=settings.API_V1_STR)
 app.include_router(export_router, prefix=settings.API_V1_STR)
 app.include_router(analytics_router, prefix=settings.API_V1_STR)
 

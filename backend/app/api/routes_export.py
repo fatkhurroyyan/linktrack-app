@@ -29,7 +29,12 @@ async def get_filtered_items(
             stmt = stmt.where(LinkItem.platform.ilike(f"%{platform}%"))
 
     if category and category.lower() not in ("all", "semua", ""):
-        stmt = stmt.where(LinkItem.primary_category == category)
+        stmt = stmt.where(
+            or_(
+                LinkItem.primary_category == category,
+                LinkItem.secondary_category == category
+            )
+        )
 
     if tag and tag.strip():
         stmt = stmt.join(LinkItem.tags).where(LinkTag.tag_name == tag.strip().lower())

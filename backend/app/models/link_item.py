@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Text, BigInteger, Integer, DateTime, JSON, ForeignKey
+from sqlalchemy import Column, String, Text, BigInteger, Integer, DateTime, JSON, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from app.database.session import Base
 
@@ -10,6 +10,14 @@ def generate_uuid() -> str:
 def get_utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
+class Category(Base):
+    __tablename__ = "categories"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    name = Column(String(100), unique=True, index=True, nullable=False)
+    is_system = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=get_utc_now)
+
 class LinkItem(Base):
     __tablename__ = "link_items"
 
@@ -18,6 +26,7 @@ class LinkItem(Base):
     platform = Column(String(50), index=True, nullable=False)  # Google Drive, GitHub, Web
     title = Column(String(500), nullable=False)
     primary_category = Column(String(100), index=True, nullable=False)
+    secondary_category = Column(String(100), index=True, nullable=True)
     subcategory = Column(String(100), nullable=True)
     summary = Column(Text, nullable=True)
     original_description = Column(Text, nullable=True)
@@ -33,6 +42,15 @@ class LinkItem(Base):
     # Relationships with eager selectin loading
     tags = relationship("LinkTag", back_populates="link", cascade="all, delete-orphan", lazy="selectin")
     gdrive_files = relationship("GDriveFile", back_populates="link", cascade="all, delete-orphan", lazy="selectin")
+
+    @property
+    def categories(self) -> list[str]:
+        cats = []
+        if self.primary_category and self.primary_category.strip():
+            cats.append(self.primary_category.strip())
+        if self.secondary_category and self.secondary_category.strip() and self.secondary_category.strip() not in cats:
+            cats.append(self.secondary_category.strip())
+        return cats[:2]
 
 class LinkTag(Base):
     __tablename__ = "link_tags"

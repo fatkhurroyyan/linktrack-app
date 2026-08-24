@@ -7,6 +7,7 @@ import {
   ArrowUpDown,
   Tag,
   Filter,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { FilterState } from '../types/link';
 import { ExportDropdown } from './ExportDropdown';
@@ -20,6 +21,7 @@ interface FilterBarProps {
   onViewModeChange: (mode: 'grid' | 'table') => void;
   activeTag: string;
   onClearTag: () => void;
+  onOpenManageCategories?: () => void;
 }
 
 export const FilterBar: React.FC<FilterBarProps> = ({
@@ -31,6 +33,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   onViewModeChange,
   activeTag,
   onClearTag,
+  onOpenManageCategories,
 }) => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6 space-y-3">
@@ -56,8 +59,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           )}
         </div>
 
-        {/* Middle: Category Dropdown */}
-        <div className="flex items-center gap-2">
+        {/* Middle: Category Dropdown & Manage Categories Button */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <div className="relative flex-1 sm:flex-none">
             <select
               value={filters.category}
@@ -73,6 +76,17 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             </select>
             <Filter className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
           </div>
+
+          {onOpenManageCategories && (
+            <button
+              onClick={onOpenManageCategories}
+              className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-brand-300 text-xs font-medium transition-colors flex-shrink-0"
+              title="Kelola Kategori (Tambah & Hapus)"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Kelola Kategori</span>
+            </button>
+          )}
 
           {/* Sort By Dropdown */}
           <div className="relative flex-1 sm:flex-none">

@@ -6,12 +6,22 @@ export interface GDriveFile {
   web_view_link?: string;
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  is_system: boolean;
+  usage_count: number;
+  created_at?: string;
+}
+
 export interface LinkItem {
   id: string;
   url: string;
   platform: 'Google Drive' | 'GitHub' | 'Web' | string;
   title: string;
   primary_category: string;
+  secondary_category?: string;
+  categories?: string[];
   subcategory?: string;
   summary?: string;
   original_description?: string;

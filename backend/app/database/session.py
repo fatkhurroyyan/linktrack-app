@@ -52,3 +52,43 @@ async def init_db():
             await conn.exec_driver_sql("PRAGMA synchronous=NORMAL;")
         # Auto-create all tables (SQLite or Supabase PostgreSQL)
         await conn.run_sync(Base.metadata.create_all)
+
+        # Auto-migrate secondary_category column if missing on existing link_items table
+        try:
+            if is_sqlite:
+                table_info = await conn.exec_driver_sql("PRAGMA table_info(link_items);")
+                columns = [row[1] for row in table_info.fetchall()]
+                if "secondary_category" not in columns:
+                    await conn.exec_driver_sql("ALTER TABLE link_items ADD COLUMN secondary_category VARCHAR(100);")
+            else:
+                await conn.exec_driver_sql("ALTER TABLE link_items ADD COLUMN IF NOT EXISTS secondary_category VARCHAR(100);")
+        except Exception:
+            pass
+
+    # Seed default categories if empty
+    from app.models.link_item import Category
+    from sqlalchemy import select
+
+    DEFAULT_CATEGORIES = [
+        ("GDrive", True),
+        ("GitHub", True),
+        ("Frontend Development", False),
+        ("Backend & API", False),
+        ("AI & Machine Learning", False),
+        ("Data & Research", False),
+        ("Desain & Aset Grafis", False),
+        ("DevOps & Cloud", False),
+        ("E-book & Edukasi", False),
+        ("Produktivitas & Tools", False),
+    ]
+
+    async with AsyncSessionLocal() as session:
+        try:
+            for cat_name, is_sys in DEFAULT_CATEGORIES:
+                stmt = select(Category).where(Category.name == cat_name)
+                res = await session.execute(stmt)
+                if not res.scalars().first():
+                    session.add(Category(name=cat_name, is_system=is_sys))
+            await session.commit()
+        except Exception:
+            await session.rollback()

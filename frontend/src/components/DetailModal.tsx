@@ -15,6 +15,7 @@ import { LinkItem } from '../types/link';
 interface DetailModalProps {
   item: LinkItem | null;
   isOpen: boolean;
+  categoriesList?: string[];
   onClose: () => void;
   onSave: (id: string, updated: Partial<LinkItem>) => Promise<void>;
 }
@@ -22,13 +23,24 @@ interface DetailModalProps {
 export const DetailModal: React.FC<DetailModalProps> = ({
   item,
   isOpen,
+  categoriesList = [],
   onClose,
   onSave,
 }) => {
   if (!isOpen || !item) return null;
 
+  const isGDrive =
+    item.platform.toLowerCase().includes('drive') ||
+    item.url.toLowerCase().includes('drive.google.com');
+  const isGitHub =
+    item.platform.toLowerCase().includes('github') ||
+    item.url.toLowerCase().includes('github.com');
+
   const [title, setTitle] = useState(item.title);
-  const [category, setCategory] = useState(item.primary_category);
+  const [primaryCategory, setPrimaryCategory] = useState(
+    isGDrive ? 'GDrive' : isGitHub ? 'GitHub' : item.primary_category
+  );
+  const [secondaryCategory, setSecondaryCategory] = useState(item.secondary_category || '');
   const [subcategory, setSubcategory] = useState(item.subcategory || '');
   const [summary, setSummary] = useState(item.summary || '');
   const [tagsStr, setTagsStr] = useState(item.tags.join(', '));
@@ -37,11 +49,12 @@ export const DetailModal: React.FC<DetailModalProps> = ({
 
   useEffect(() => {
     setTitle(item.title);
-    setCategory(item.primary_category);
+    setPrimaryCategory(isGDrive ? 'GDrive' : isGitHub ? 'GitHub' : item.primary_category);
+    setSecondaryCategory(item.secondary_category || '');
     setSubcategory(item.subcategory || '');
     setSummary(item.summary || '');
     setTagsStr(item.tags.join(', '));
-  }, [item]);
+  }, [item, isGDrive, isGitHub]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,9 +65,12 @@ export const DetailModal: React.FC<DetailModalProps> = ({
         .map((t) => t.trim().toLowerCase())
         .filter(Boolean);
 
+      const secVal = secondaryCategory.trim() ? secondaryCategory.trim() : null;
+
       await onSave(item.id, {
         title,
-        primary_category: category,
+        primary_category: isGDrive ? 'GDrive' : isGitHub ? 'GitHub' : primaryCategory,
+        secondary_category: secVal || undefined,
         subcategory,
         summary,
         tags: tagsArray,
@@ -64,6 +80,10 @@ export const DetailModal: React.FC<DetailModalProps> = ({
       setIsSaving(false);
     }
   };
+
+  const availableSecondary = categoriesList.filter(
+    (c) => c !== 'GDrive' && c !== 'GitHub'
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -157,27 +177,62 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                 />
               </div>
 
-              {/* Categories */}
+              {/* Categories (Max 2) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 font-medium mb-1">Kategori Utama</label>
-                  <input
-                    type="text"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    required
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-brand-500/60"
-                  />
+                  <label className="block text-slate-400 font-medium mb-1">
+                    Kategori Utama {isGDrive || isGitHub ? '(Mutlak 🔒)' : ''}
+                  </label>
+                  {isGDrive || isGitHub ? (
+                    <div className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2 text-amber-300 font-semibold text-xs flex items-center justify-between">
+                      <span>{isGDrive ? 'GDrive' : 'GitHub'}</span>
+                      <span className="text-[10px] text-slate-500 font-normal">Terkunci otomatis</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={primaryCategory}
+                      onChange={(e) => setPrimaryCategory(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-brand-500/60"
+                    >
+                      {availableSecondary.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div>
-                  <label className="block text-slate-400 font-medium mb-1">Sub-Kategori / Use Case</label>
-                  <input
-                    type="text"
-                    value={subcategory}
-                    onChange={(e) => setSubcategory(e.target.value)}
+                  <label className="block text-slate-400 font-medium mb-1">
+                    Kategori Ke-2 (Opsional)
+                  </label>
+                  <select
+                    value={secondaryCategory}
+                    onChange={(e) => setSecondaryCategory(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-brand-500/60"
-                  />
+                  >
+                    <option value="">— Tidak Ada Kategori Ke-2 —</option>
+                    {availableSecondary
+                      .filter((cat) => cat !== primaryCategory)
+                      .map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                  </select>
                 </div>
+              </div>
+
+              {/* Subcategory */}
+              <div>
+                <label className="block text-slate-400 font-medium mb-1">Sub-Kategori / Use Case</label>
+                <input
+                  type="text"
+                  value={subcategory}
+                  onChange={(e) => setSubcategory(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-brand-500/60"
+                  placeholder="Misal: UI Component Library, REST API Template..."
+                />
               </div>
 
               {/* AI Summary */}

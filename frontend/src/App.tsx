@@ -3,6 +3,7 @@ import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
 import { IngestionBar } from './components/IngestionBar';
 import { BatchIngestionModal } from './components/BatchIngestionModal';
+import { CategoryManageModal } from './components/CategoryManageModal';
 import { FilterBar } from './components/FilterBar';
 import { LinkCard } from './components/LinkCard';
 import { LinkTable } from './components/LinkTable';
@@ -14,12 +15,14 @@ import {
   AnalyticsStats,
   FilterState,
   BatchProcessResponse,
+  Category,
 } from './types/link';
 import { Layers, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export const App: React.FC = () => {
   // State
   const [links, setLinks] = useState<LinkItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [stats, setStats] = useState<AnalyticsStats | null>(null);
   const [health, setHealth] = useState<{ status: string; gemini_model: string; ai_active: boolean }>({
@@ -33,6 +36,7 @@ export const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [showStats, setShowStats] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<LinkItem | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
@@ -67,11 +71,22 @@ export const App: React.FC = () => {
       setTotalCount(typeof data?.total === 'number' ? data.total : 0);
     } catch (err: any) {
       console.error('Failed to fetch links:', err);
-      // Don't crash, just show toast if needed
     } finally {
       setIsLoading(false);
     }
   }, [filters]);
+
+  // Fetch Categories
+  const fetchCategories = useCallback(async () => {
+    try {
+      const data = await api.getCategories();
+      if (Array.isArray(data)) {
+        setCategories(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch categories:', err);
+    }
+  }, []);
 
   // Fetch Analytics & Health
   const fetchMetadata = async () => {
@@ -93,7 +108,8 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     fetchMetadata();
-  }, []);
+    fetchCategories();
+  }, [fetchCategories]);
 
   useEffect(() => {
     fetchLinks();
@@ -105,7 +121,7 @@ export const App: React.FC = () => {
     try {
       const newItem = await api.processLink(url);
       showToast('success', `Berhasil mengurasi: "${newItem.title}"`);
-      await Promise.all([fetchLinks(), fetchMetadata()]);
+      await Promise.all([fetchLinks(), fetchMetadata(), fetchCategories()]);
     } catch (err: any) {
       const errMsg = err.response?.data?.detail || 'Gagal memproses tautan.';
       showToast('error', errMsg);
@@ -120,7 +136,7 @@ export const App: React.FC = () => {
     try {
       const res = await api.processBatch(urls);
       showToast('success', `Batch Selesai: ${res.successful} berhasil, ${res.failed} gagal.`);
-      await Promise.all([fetchLinks(), fetchMetadata()]);
+      await Promise.all([fetchLinks(), fetchMetadata(), fetchCategories()]);
       return res;
     } catch (err: any) {
       showToast('error', 'Gagal memproses batch link.');
@@ -134,8 +150,8 @@ export const App: React.FC = () => {
   const handleSaveDetail = async (id: string, updated: Partial<LinkItem>) => {
     try {
       await api.updateLink(id, updated);
-      showToast('success', 'Metadata berhasil diperbarui.');
-      await Promise.all([fetchLinks(), fetchMetadata()]);
+      showToast('success', 'Kategori & metadata berhasil diperbarui.');
+      await Promise.all([fetchLinks(), fetchMetadata(), fetchCategories()]);
     } catch (err) {
       showToast('error', 'Gagal memperbarui metadata.');
     }
@@ -149,9 +165,37 @@ export const App: React.FC = () => {
     try {
       await api.deleteLink(id);
       showToast('info', 'Tautan telah dihapus.');
-      await Promise.all([fetchLinks(), fetchMetadata()]);
+      await Promise.all([fetchLinks(), fetchMetadata(), fetchCategories()]);
     } catch (err) {
       showToast('error', 'Gagal menghapus tautan.');
+    }
+  };
+
+  // Handler: Create Category
+  const handleCreateCategory = async (name: string): Promise<boolean> => {
+    try {
+      await api.createCategory(name);
+      showToast('success', `Kategori "${name}" berhasil dibuat.`);
+      await fetchCategories();
+      return true;
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || 'Gagal membuat kategori.';
+      showToast('error', msg);
+      return false;
+    }
+  };
+
+  // Handler: Delete Category
+  const handleDeleteCategory = async (id: string, force: boolean = false): Promise<boolean> => {
+    try {
+      const res = await api.deleteCategory(id, force);
+      showToast('info', res.message || 'Kategori berhasil dihapus.');
+      await Promise.all([fetchCategories(), fetchLinks(), fetchMetadata()]);
+      return true;
+    } catch (err: any) {
+      const msg = err.response?.data?.detail?.message || err.response?.data?.detail || 'Gagal menghapus kategori.';
+      showToast('error', msg);
+      return false;
     }
   };
 
@@ -181,17 +225,22 @@ export const App: React.FC = () => {
     setIsDetailOpen(true);
   };
 
-  // Categories list from analytics or hardcoded defaults
-  const categoriesList = stats?.top_categories?.map((c) => c.category) || [
-    'Frontend Development',
-    'Backend & API',
-    'AI & Machine Learning',
-    'Data & Research',
-    'Desain & Aset Grafis',
-    'DevOps & Cloud',
-    'E-book & Edukasi',
-    'Produktivitas & Tools',
-  ];
+  // Categories list from Category state, analytics, or defaults
+  const categoriesList =
+    categories.length > 0
+      ? categories.map((c) => c.name)
+      : stats?.top_categories?.map((c) => c.category) || [
+          'GDrive',
+          'GitHub',
+          'Frontend Development',
+          'Backend & API',
+          'AI & Machine Learning',
+          'Data & Research',
+          'Desain & Aset Grafis',
+          'DevOps & Cloud',
+          'E-book & Edukasi',
+          'Produktivitas & Tools',
+        ];
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-brand-500/30 selection:text-brand-200">
@@ -258,6 +307,7 @@ export const App: React.FC = () => {
           onViewModeChange={setViewMode}
           activeTag={filters.tag}
           onClearTag={handleClearTag}
+          onOpenManageCategories={() => setIsCategoryModalOpen(true)}
         />
 
         {/* Content Listing */}
@@ -287,9 +337,11 @@ export const App: React.FC = () => {
                 <LinkCard
                   key={item.id}
                   item={item}
+                  categoriesList={categoriesList}
                   onSelectTag={handleSelectTag}
                   onOpenDetail={handleOpenDetail}
                   onDelete={handleDeleteLink}
+                  onUpdateLink={handleSaveDetail}
                 />
               ))}
             </div>
@@ -312,10 +364,20 @@ export const App: React.FC = () => {
         isLoading={isProcessing}
       />
 
+      {/* Category Management Modal */}
+      <CategoryManageModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        categories={categories}
+        onCreateCategory={handleCreateCategory}
+        onDeleteCategory={handleDeleteCategory}
+      />
+
       {/* Detail & Edit Modal */}
       <DetailModal
         item={selectedItem}
         isOpen={isDetailOpen}
+        categoriesList={categoriesList}
         onClose={() => setIsDetailOpen(false)}
         onSave={handleSaveDetail}
       />

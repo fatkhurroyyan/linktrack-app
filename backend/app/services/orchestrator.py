@@ -47,8 +47,14 @@ class LinkOrchestrator:
         extractor = self.select_extractor(clean_url)
         extracted: ExtractedContent = await extractor.extract(clean_url)
 
-        # 4. AI Categorization & Taxonomy
-        ai_res = await ai_service.categorize_and_summarize(extracted)
+        # 4. Fetch available categories from database for AI prompt
+        from app.models.link_item import Category
+        cat_stmt = select(Category.name)
+        cat_res = await db.execute(cat_stmt)
+        available_cats = [c for c in cat_res.scalars().all()]
+
+        # 5. AI Categorization & Taxonomy
+        ai_res = await ai_service.categorize_and_summarize(extracted, available_cats)
 
         # Construct Tag Models
         tags_objs = [
@@ -68,12 +74,13 @@ class LinkOrchestrator:
             for f in extracted.child_files
         ]
 
-        # 5. Save or Update to Database
+        # 6. Save or Update to Database
         if existing_item:
             item = existing_item
             item.platform = ai_res.platform
             item.title = ai_res.title or extracted.title
             item.primary_category = ai_res.primary_category
+            item.secondary_category = ai_res.secondary_category
             item.subcategory = ai_res.subcategory
             item.summary = ai_res.summary
             item.original_description = extracted.original_description
@@ -90,6 +97,7 @@ class LinkOrchestrator:
                 platform=ai_res.platform,
                 title=ai_res.title or extracted.title,
                 primary_category=ai_res.primary_category,
+                secondary_category=ai_res.secondary_category,
                 subcategory=ai_res.subcategory,
                 summary=ai_res.summary,
                 original_description=extracted.original_description,

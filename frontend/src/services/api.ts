@@ -5,6 +5,7 @@ import {
   BatchProcessResponse,
   AnalyticsStats,
   FilterState,
+  Category,
 } from '../types/link';
 
 // Get backend URL from Vercel / Vite env, fallback to relative path
@@ -62,6 +63,22 @@ export const api = {
   // Delete Link
   deleteLink: async (id: string): Promise<void> => {
     await apiClient.delete(`/links/${id}`);
+  },
+
+  // Category Management APIs
+  getCategories: async (): Promise<Category[]> => {
+    const res = await apiClient.get<Category[]>('/categories');
+    return res.data;
+  },
+
+  createCategory: async (name: string): Promise<Category> => {
+    const res = await apiClient.post<Category>('/categories', { name });
+    return res.data;
+  },
+
+  deleteCategory: async (id: string, force: boolean = false): Promise<{ message: string; affected_links?: number }> => {
+    const res = await apiClient.delete(`/categories/${id}?force=${force}`);
+    return res.data;
   },
 
   // Get Analytics Stats

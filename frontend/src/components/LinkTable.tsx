@@ -84,9 +84,16 @@ export const LinkTable: React.FC<LinkTableProps> = ({
 
                 {/* Category & Subcategory */}
                 <td className="py-3 px-4">
-                  <span className="inline-block px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 text-[11px] font-medium mb-1">
-                    {item.primary_category}
-                  </span>
+                  <div className="flex flex-wrap gap-1 mb-1">
+                    <span className="inline-block px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 text-[11px] font-medium">
+                      {item.primary_category}
+                    </span>
+                    {item.secondary_category && (
+                      <span className="inline-block px-2 py-0.5 rounded-md bg-brand-500/10 text-brand-300 border border-brand-500/20 text-[11px] font-medium">
+                        {item.secondary_category}
+                      </span>
+                    )}
+                  </div>
                   {item.subcategory && (
                     <p className="text-[11px] text-brand-400 font-medium">
                       ↳ {item.subcategory}

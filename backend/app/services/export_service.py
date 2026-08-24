@@ -73,11 +73,12 @@ class ExportService:
             date_str = item.created_at.strftime("%Y-%m-%d %H:%M") if item.created_at else ""
             is_zebra = (row_idx % 2 == 1)
 
+            cats_str = ", ".join(item.categories) if item.categories else item.primary_category
             row_values = [
                 (row_idx - 1, center_alignment, data_font, None),
                 (item.title, regular_alignment, data_font, None),
                 (item.platform, center_alignment, data_font, None),
-                (item.primary_category, regular_alignment, data_font, None),
+                (cats_str, regular_alignment, data_font, None),
                 (item.subcategory or "-", regular_alignment, data_font, None),
                 (item.primary_language or "-", center_alignment, data_font, None),
                 (item.summary or "-", wrap_alignment, data_font, None),
@@ -141,11 +142,12 @@ class ExportService:
         for idx, item in enumerate(items, 1):
             tags_str = ", ".join([t.tag_name for t in item.tags]) if item.tags else ""
             date_str = item.created_at.strftime("%Y-%m-%d %H:%M") if item.created_at else ""
+            cats_str = ", ".join(item.categories) if item.categories else item.primary_category
             writer.writerow([
                 idx,
                 item.title,
                 item.platform,
-                item.primary_category,
+                cats_str,
                 item.subcategory or "",
                 item.primary_language or "",
                 item.summary or "",
@@ -237,8 +239,9 @@ class ExportService:
 
         for idx, item in enumerate(items, 1):
             tags_str = ", ".join([t.tag_name for t in item.tags]) if item.tags else "-"
+            cats_str = ", ".join(item.categories) if item.categories else item.primary_category
             title_p = Paragraph(f"<b>{item.title}</b><br/><font color='#64748B'>[{item.platform}]</font>", table_cell_style)
-            cat_p = Paragraph(f"<b>{item.primary_category}</b><br/>{item.subcategory or '-'}", table_cell_style)
+            cat_p = Paragraph(f"<b>{cats_str}</b><br/>{item.subcategory or '-'}", table_cell_style)
             summary_p = Paragraph(item.summary or "-", table_cell_style)
             tags_p = Paragraph(tags_str, table_cell_style)
             link_p = Paragraph(f"<a href='{item.url}' color='#2563EB'><u>Buka Link</u></a>", link_style)

@@ -2,12 +2,37 @@ from datetime import datetime
 from pydantic import BaseModel, Field, HttpUrl
 from typing import Optional, Any
 
+# Category Schemas
+class CategoryCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100, description="Nama kategori baru")
+
+class CategoryResponse(BaseModel):
+    id: str
+    name: str
+    is_system: bool = False
+    usage_count: int = 0
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class CategoryUsageCheckResponse(BaseModel):
+    category_id: str
+    name: str
+    usage_count: int
+    can_delete: bool
+    message: str
+
 # Pydantic Schema for Gemini Structured Output
 class AICategorizationSchema(BaseModel):
     title: str = Field(description="Judul bersih, deskriptif, dan representatif dari resource")
     platform: str = Field(description="Platform resource: Google Drive | GitHub | Web")
     primary_category: str = Field(
-        description="Kategori utama, contoh: Frontend Development, Backend & API, AI & Machine Learning, Data & Research, Desain & Aset Grafis, DevOps & Cloud, E-book & Edukasi, Produktivitas & Tools"
+        description="Kategori utama (contoh: GDrive bila Google Drive, GitHub bila repositori GitHub, atau kategori utama lain bila Web)"
+    )
+    secondary_category: Optional[str] = Field(
+        default=None,
+        description="Kategori kedua opsional dari daftar kategori aktif, atau null bila tidak ada"
     )
     subcategory: str = Field(
         description="Sub-kategori atau spesifik use-case, contoh: UI Component Library, Fine-Tuning Pipeline, Dataset Riset, 3D Icon Asset, REST API Template"
@@ -33,6 +58,8 @@ class LinkBatchProcessRequest(BaseModel):
 class LinkUpdateRequest(BaseModel):
     title: Optional[str] = None
     primary_category: Optional[str] = None
+    secondary_category: Optional[str] = None
+    categories: Optional[list[str]] = None
     subcategory: Optional[str] = None
     summary: Optional[str] = None
     tags: Optional[list[str]] = None
@@ -54,6 +81,8 @@ class LinkItemResponse(BaseModel):
     platform: str
     title: str
     primary_category: str
+    secondary_category: Optional[str] = None
+    categories: list[str] = []
     subcategory: Optional[str] = None
     summary: Optional[str] = None
     original_description: Optional[str] = None

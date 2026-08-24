@@ -26,35 +26,54 @@ class AIService:
             self._client = genai.Client(api_key=settings.GEMINI_API_KEY)
         return self._client
 
-    async def categorize_and_summarize(self, content: ExtractedContent) -> AICategorizationSchema:
+    async def categorize_and_summarize(
+        self,
+        content: ExtractedContent,
+        available_categories: Optional[list[str]] = None
+    ) -> AICategorizationSchema:
         client = self._get_client()
         
         # If Gemini API Key is configured, use Gemini LLM
         if client:
             try:
-                return await self._call_gemini(client, content)
+                return await self._call_gemini(client, content, available_categories)
             except Exception as e:
                 logger.warning(f"Gemini API call failed, falling back to heuristic categorization: {e}")
 
         # Intelligent Heuristic Fallback (when API key is not set or network fails)
-        return self._heuristic_categorize(content)
+        return self._heuristic_categorize(content, available_categories)
 
-    async def _call_gemini(self, client: genai.Client, content: ExtractedContent) -> AICategorizationSchema:
+    async def _call_gemini(
+        self,
+        client: genai.Client,
+        content: ExtractedContent,
+        available_categories: Optional[list[str]] = None
+    ) -> AICategorizationSchema:
+        cats_hint = ""
+        if available_categories:
+            non_sys_cats = [c for c in available_categories if c not in ("GDrive", "GitHub")]
+            cats_hint = f"\nDaftar Kategori Tersedia untuk dipilih: {', '.join(non_sys_cats)}\n"
+
         system_instruction = (
             "Anda adalah AI Knowledge Architect dan Resource Curator profesional.\n"
             "Tugas Anda adalah mengklasifikasikan dan meringkas tautan digital (Google Drive, GitHub, atau Web umum) "
             "berdasarkan data yang diekstrak.\n\n"
-            "Aturan Taksonomi:\n"
-            "1. title: Judul bersih dan informatif.\n"
+            "Aturan Taksonomi & Kategori Mutlak:\n"
+            "1. title: Judul bersih, ringkas, dan representatif.\n"
             "2. platform: Harus salah satu dari 'Google Drive', 'GitHub', atau 'Web'.\n"
-            "3. primary_category: Pilih salah satu kategori utama yang paling tepat, seperti: "
-            "'Frontend Development', 'Backend & API', 'AI & Machine Learning', 'Data & Research', "
-            "'Desain & Aset Grafis', 'DevOps & Cloud', 'E-book & Edukasi', 'Produktivitas & Tools', "
-            "'Security & Cyber', 'Mobile Development', atau 'Artikel & Blog'.\n"
-            "4. subcategory: Tentukan spesifik use-case (misal: 'UI Component Library', 'Dataset CSV', 'REST API Template', '3D Model', 'Tutorial Lengkap').\n"
-            "5. summary: Buat 1-2 kalimat padat, informatif, dan jelas dalam Bahasa Indonesia tentang fungsi utama resource ini.\n"
-            "6. tags: 3-6 tag kata kunci relevan, huruf kecil semua, tanpa spasi (gunakan tanda minus '-' jika multi-kata).\n"
-            "7. primary_language: Bahasa pemrograman utama jika repositori kode, atau null jika bukan."
+            "3. primary_category:\n"
+            "   - JIKA PLATFORM ADALAH Google Drive: primary_category HARUS MUTLAK bernilai 'GDrive'.\n"
+            "   - JIKA PLATFORM ADALAH GitHub: primary_category HARUS MUTLAK bernilai 'GitHub'.\n"
+            "   - JIKA PLATFORM ADALAH Web: pilih 1 kategori utama paling relevan dari daftar kategori.\n"
+            "4. secondary_category:\n"
+            "   - Untuk link Google Drive & GitHub: Pilih 1 kategori tambahan terbaik (use-case/topik) dari daftar kategori tersedia.\n"
+            "   - Untuk link Web: Pilih 1 kategori kedua (opsional) jika ada topik sekunder yang kuat, atau null bila tidak perlu.\n"
+            "   - Maksimal hanya boleh 1 secondary_category (sehingga total kategori per link maksimal 2).\n"
+            f"{cats_hint}"
+            "5. subcategory: Tentukan spesifik use-case (misal: 'UI Component Library', 'Dataset Riset', 'REST API Template', '3D Model', 'Tutorial Lengkap').\n"
+            "6. summary: Buat 1-2 kalimat padat, informatif, dan jelas dalam Bahasa Indonesia tentang fungsi utama resource ini.\n"
+            "7. tags: 3-6 tag kata kunci relevan, huruf kecil semua, tanpa spasi (gunakan tanda hubung '-' bila multi-kata).\n"
+            "8. primary_language: Bahasa pemrograman utama jika repositori kode, atau null jika bukan."
         )
 
         prompt = (
@@ -82,6 +101,15 @@ class AIService:
             
             # Parse structured JSON response
             data = json.loads(response.text)
+            
+            # Enforce absolute categorization rules strictly
+            if content.platform == "GDrive" or "drive.google.com" in content.url:
+                data["primary_category"] = "GDrive"
+                data["platform"] = "Google Drive"
+            elif content.platform == "GitHub" or "github.com" in content.url:
+                data["primary_category"] = "GitHub"
+                data["platform"] = "GitHub"
+
             return AICategorizationSchema(**data)
         except Exception as e:
             # Fallback to secondary model if primary fails
@@ -97,78 +125,94 @@ class AIService:
                     ),
                 )
                 data = json.loads(response.text)
+                if content.platform == "GDrive" or "drive.google.com" in content.url:
+                    data["primary_category"] = "GDrive"
+                    data["platform"] = "Google Drive"
+                elif content.platform == "GitHub" or "github.com" in content.url:
+                    data["primary_category"] = "GitHub"
+                    data["platform"] = "GitHub"
                 return AICategorizationSchema(**data)
             raise e
 
-    def _heuristic_categorize(self, content: ExtractedContent) -> AICategorizationSchema:
+    def _heuristic_categorize(
+        self,
+        content: ExtractedContent,
+        available_categories: Optional[list[str]] = None
+    ) -> AICategorizationSchema:
         """Heuristic rule-based taxonomy fallback when LLM API is unavailable."""
         text = f"{content.title} {content.original_description} {content.raw_text}".lower()
         
         platform_name = "Web"
-        if content.platform == "GDrive":
+        if content.platform == "GDrive" or "drive.google.com" in content.url:
             platform_name = "Google Drive"
-        elif content.platform == "GitHub":
+        elif content.platform == "GitHub" or "github.com" in content.url:
             platform_name = "GitHub"
 
-        # Categorization heuristics
+        # Defaults
         primary_category = "Produktivitas & Tools"
+        secondary_category = None
         subcategory = "Resource Web"
         tags = ["link", "resource"]
 
-        if content.platform == "GitHub":
+        if platform_name == "GitHub":
+            primary_category = "GitHub"
             if any(k in text for k in ["react", "vue", "svelte", "tailwind", "ui", "component", "css", "frontend", "html"]):
-                primary_category = "Frontend Development"
+                secondary_category = "Frontend Development"
                 subcategory = "UI Component Library"
                 tags.extend(["frontend", "ui", "web-dev"])
             elif any(k in text for k in ["ai", "llm", "gpt", "model", "machine learning", "deep learning", "pytorch", "tensorflow", "gemini"]):
-                primary_category = "AI & Machine Learning"
+                secondary_category = "AI & Machine Learning"
                 subcategory = "AI Framework & Tooling"
                 tags.extend(["ai", "machine-learning", "llm"])
             elif any(k in text for k in ["api", "backend", "fastapi", "django", "express", "server", "database", "postgres", "sql"]):
-                primary_category = "Backend & API"
+                secondary_category = "Backend & API"
                 subcategory = "Backend Service & Template"
                 tags.extend(["backend", "api", "database"])
             elif any(k in text for k in ["docker", "kubernetes", "ci/cd", "devops", "cloud", "aws", "terraform"]):
-                primary_category = "DevOps & Cloud"
+                secondary_category = "DevOps & Cloud"
                 subcategory = "Infrastructure as Code"
                 tags.extend(["devops", "cloud", "infrastructure"])
             else:
-                primary_category = "Software Development"
+                secondary_category = "Produktivitas & Tools"
                 subcategory = "Code Repository"
                 tags.extend(["github", "open-source"])
 
             if content.primary_language:
                 tags.append(content.primary_language.lower())
 
-        elif content.platform == "GDrive":
+        elif platform_name == "Google Drive":
+            primary_category = "GDrive"
             if any(k in text for k in ["dataset", "data", "csv", "xlsx", "survey", "analisis"]):
-                primary_category = "Data & Research"
+                secondary_category = "Data & Research"
                 subcategory = "Dataset & Spreadsheet"
                 tags.extend(["dataset", "data", "gdrive"])
             elif any(k in text for k in ["buku", "ebook", "modul", "materi", "kuliah", "skripsi", "jurnal"]):
-                primary_category = "E-book & Edukasi"
+                secondary_category = "E-book & Edukasi"
                 subcategory = "Materi Pembelajaran & Dokumen"
                 tags.extend(["edukasi", "dokumen", "materi"])
             elif any(k in text for k in ["desain", "aset", "icon", "vector", "foto", "video", "asset", "3d"]):
-                primary_category = "Desain & Aset Grafis"
+                secondary_category = "Desain & Aset Grafis"
                 subcategory = "Asset Koleksi Desain"
                 tags.extend(["desain", "media", "aset"])
             else:
-                primary_category = "Dokumen & Arsip"
+                secondary_category = "Produktivitas & Tools"
                 subcategory = "Google Drive Folder"
                 tags.extend(["gdrive", "arsip", "folder"])
 
-        else: # Web
+        else:  # Web
             if any(k in text for k in ["docs", "documentation", "guide", "tutorial", "learn"]):
                 primary_category = "E-book & Edukasi"
+                secondary_category = "Produktivitas & Tools"
                 subcategory = "Dokumentasi Resmi"
                 tags.extend(["docs", "tutorial", "guide"])
             elif any(k in text for k in ["ai", "prompt", "chatgpt", "gemini", "agent"]):
                 primary_category = "AI & Machine Learning"
+                secondary_category = "Produktivitas & Tools"
                 subcategory = "AI Web Platform"
                 tags.extend(["ai", "tools", "web"])
             else:
-                primary_category = "Artikel & Blog"
+                primary_category = "Produktivitas & Tools"
+                secondary_category = None
                 subcategory = "Portal Informasi"
                 tags.extend(["web", "article"])
 
@@ -182,6 +226,7 @@ class AIService:
             title=content.title[:150] if content.title else f"{platform_name} Resource",
             platform=platform_name,
             primary_category=primary_category,
+            secondary_category=secondary_category,
             subcategory=subcategory,
             summary=summary,
             tags=list(dict.fromkeys(tags))[:6],

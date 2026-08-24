@@ -38,6 +38,8 @@ def format_link_response(item: LinkItem) -> LinkItemResponse:
         platform=item.platform,
         title=item.title,
         primary_category=item.primary_category,
+        secondary_category=item.secondary_category,
+        categories=item.categories,
         subcategory=item.subcategory,
         summary=item.summary,
         original_description=item.original_description,
@@ -89,7 +91,7 @@ async def process_batch_links(
 async def list_links(
     query: Optional[str] = Query(None, description="Search keyword in title, summary, or tags"),
     platform: Optional[str] = Query(None, description="Filter platform: All, Google Drive, GitHub, Web"),
-    category: Optional[str] = Query(None, description="Filter by primary category"),
+    category: Optional[str] = Query(None, description="Filter by primary or secondary category"),
     tag: Optional[str] = Query(None, description="Filter by tag"),
     sort_by: str = Query("created_at", description="Field to sort by: created_at, title, platform"),
     sort_order: str = Query("desc", description="Sort order: asc or desc"),
@@ -108,9 +110,14 @@ async def list_links(
         else:
             stmt = stmt.where(LinkItem.platform.ilike(f"%{platform}%"))
 
-    # 2. Category Filter
+    # 2. Category Filter (Check both primary and secondary category)
     if category and category.lower() not in ("all", "semua", ""):
-        stmt = stmt.where(LinkItem.primary_category == category)
+        stmt = stmt.where(
+            or_(
+                LinkItem.primary_category == category,
+                LinkItem.secondary_category == category
+            )
+        )
 
     # 3. Tag Filter
     if tag and tag.strip():
@@ -140,7 +147,12 @@ async def list_links(
         else:
             count_stmt = count_stmt.where(LinkItem.platform.ilike(f"%{platform}%"))
     if category and category.lower() not in ("all", "semua", ""):
-        count_stmt = count_stmt.where(LinkItem.primary_category == category)
+        count_stmt = count_stmt.where(
+            or_(
+                LinkItem.primary_category == category,
+                LinkItem.secondary_category == category
+            )
+        )
     if tag and tag.strip():
         count_stmt = count_stmt.join(LinkItem.tags).where(LinkTag.tag_name == tag.strip().lower())
     if query and query.strip():
@@ -211,10 +223,43 @@ async def update_link(
     if not item:
         raise HTTPException(status_code=404, detail="Item tautan tidak ditemukan.")
 
+    is_gdrive = "drive" in item.platform.lower() or "drive.google.com" in item.url
+    is_github = "github" in item.platform.lower() or "github.com" in item.url
+
     if payload.title is not None:
         item.title = payload.title
-    if payload.primary_category is not None:
-        item.primary_category = payload.primary_category
+
+    # Handle Category Updates (Array categories or primary/secondary fields)
+    if payload.categories is not None:
+        # Validate max 2 categories
+        clean_cats = [c.strip() for c in payload.categories if c and c.strip()]
+        if is_gdrive:
+            item.primary_category = "GDrive"
+            sec = next((c for c in clean_cats if c != "GDrive"), None)
+            item.secondary_category = sec
+        elif is_github:
+            item.primary_category = "GitHub"
+            sec = next((c for c in clean_cats if c != "GitHub"), None)
+            item.secondary_category = sec
+        else:
+            if len(clean_cats) > 0:
+                item.primary_category = clean_cats[0]
+            if len(clean_cats) > 1:
+                item.secondary_category = clean_cats[1]
+            elif len(clean_cats) == 1:
+                item.secondary_category = None
+    else:
+        if payload.primary_category is not None:
+            if is_gdrive:
+                item.primary_category = "GDrive"
+            elif is_github:
+                item.primary_category = "GitHub"
+            else:
+                item.primary_category = payload.primary_category
+        if payload.secondary_category is not None:
+            # Check if secondary is empty string -> set None
+            item.secondary_category = payload.secondary_category.strip() if payload.secondary_category.strip() else None
+
     if payload.subcategory is not None:
         item.subcategory = payload.subcategory
     if payload.summary is not None:
