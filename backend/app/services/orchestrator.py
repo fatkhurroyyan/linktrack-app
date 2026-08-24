@@ -30,8 +30,8 @@ class LinkOrchestrator:
         else:
             return self.web_scraper
 
-    async def process_link(self, url: str, db: AsyncSession) -> LinkItem:
-        # 1. Validate URL & Check SSRF
+    async def process_link(self, url: str, db: AsyncSession, allow_reingest: bool = False) -> LinkItem:
+        # 1. Validate URL & Check SSRF (Auto-prefixes https:// if missing)
         clean_url = SecurityValidator.validate_url(url)
 
         # 2. Check if URL already exists in database with preloaded relationships
@@ -42,6 +42,10 @@ class LinkOrchestrator:
         )
         res = await db.execute(stmt)
         existing_item = res.scalars().first()
+
+        # If link already exists and reingest is not requested, reject with warning
+        if existing_item and not allow_reingest:
+            raise ValueError(f"Tautan ini sudah pernah Anda masukkan sebelumnya: '{existing_item.title}'")
 
         # 3. Extract Content from URL
         extractor = self.select_extractor(clean_url)
@@ -115,20 +119,38 @@ class LinkOrchestrator:
         await db.refresh(item)
         return item
 
-    async def process_batch(self, urls: list[str], db: AsyncSession) -> tuple[list[LinkItem], list[dict]]:
+    async def process_batch(
+        self, urls: list[str], db: AsyncSession
+    ) -> tuple[list[LinkItem], list[dict], list[dict]]:
         successful_items = []
         errors = []
+        duplicates = []
 
-        unique_urls = list(dict.fromkeys([u.strip() for u in urls if u.strip()]))
+        unique_raw_urls = list(dict.fromkeys([u.strip() for u in urls if u.strip()]))
 
-        for url in unique_urls:
+        for raw_url in unique_raw_urls:
             try:
-                item = await self.process_link(url, db)
+                clean_url = SecurityValidator.validate_url(raw_url)
+                
+                # Check for existing link before scraping/AI
+                stmt = select(LinkItem).where(LinkItem.url == clean_url)
+                res = await db.execute(stmt)
+                existing = res.scalars().first()
+
+                if existing:
+                    duplicates.append({
+                        "url": clean_url,
+                        "title": existing.title,
+                        "message": f"Tautan '{existing.title}' sudah pernah Anda masukkan sebelumnya."
+                    })
+                    continue
+
+                item = await self.process_link(clean_url, db, allow_reingest=False)
                 successful_items.append(item)
             except Exception as e:
-                logger.error(f"Error processing batch URL '{url}': {e}")
-                errors.append({"url": url, "error": str(e)})
+                logger.error(f"Error processing batch URL '{raw_url}': {e}")
+                errors.append({"url": raw_url, "error": str(e)})
 
-        return successful_items, errors
+        return successful_items, errors, duplicates
 
 link_orchestrator = LinkOrchestrator()

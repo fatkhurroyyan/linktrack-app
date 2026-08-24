@@ -17,7 +17,7 @@ import {
   BatchProcessResponse,
   Category,
 } from './types/link';
-import { Layers, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Layers, RefreshCw, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 export const App: React.FC = () => {
   // State
@@ -41,13 +41,13 @@ export const App: React.FC = () => {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   // Toast Notification State
-  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; message: string } | null>(null);
 
-  const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+  const showToast = (type: 'success' | 'error' | 'info' | 'warning', message: string, duration: number = 4500) => {
     setToast({ type, message });
     setTimeout(() => {
       setToast(null);
-    }, 4000);
+    }, duration);
   };
 
   // Filter State
@@ -124,7 +124,12 @@ export const App: React.FC = () => {
       await Promise.all([fetchLinks(), fetchMetadata(), fetchCategories()]);
     } catch (err: any) {
       const errMsg = err.response?.data?.detail || 'Gagal memproses tautan.';
-      showToast('error', errMsg);
+      const isDuplicate = err.response?.status === 409 || errMsg.toLowerCase().includes('sudah pernah');
+      if (isDuplicate) {
+        showToast('warning', errMsg, 6000);
+      } else {
+        showToast('error', errMsg);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -135,7 +140,29 @@ export const App: React.FC = () => {
     setIsProcessing(true);
     try {
       const res = await api.processBatch(urls);
-      showToast('success', `Batch Selesai: ${res.successful} berhasil, ${res.failed} gagal.`);
+      const dupCount = res.duplicates_count ?? (res.duplicates ? res.duplicates.length : 0);
+      const dupList = res.duplicates || [];
+
+      if (res.successful > 0 && dupCount === 0) {
+        showToast('success', `Berhasil menambahkan ${res.successful} tautan baru.`);
+      } else if (res.successful > 0 && dupCount > 0) {
+        const dupNames = dupList.map((d) => d.title || d.url).join(', ');
+        showToast(
+          'warning',
+          `Berhasil menambahkan ${res.successful} tautan baru. ${dupCount} tautan dilewati karena sudah pernah Anda masukkan: ${dupNames}`,
+          7500
+        );
+      } else if (res.successful === 0 && dupCount > 0) {
+        const dupNames = dupList.map((d) => d.title || d.url).join(', ');
+        showToast(
+          'warning',
+          `Semua (${dupCount}) tautan dilewati karena sudah pernah Anda masukkan sebelumnya: ${dupNames}`,
+          7500
+        );
+      } else {
+        showToast('error', `Batch selesai: ${res.failed} tautan gagal diproses.`);
+      }
+
       await Promise.all([fetchLinks(), fetchMetadata(), fetchCategories()]);
       return res;
     } catch (err: any) {
@@ -294,19 +321,22 @@ export const App: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-brand-500/30 selection:text-brand-200">
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300">
+        <div className="fixed bottom-6 right-6 z-50 max-w-md animate-in fade-in slide-in-from-bottom-5 duration-300">
           <div
-            className={`flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl border text-xs font-medium ${
+            className={`flex items-start gap-2.5 px-4 py-3 rounded-xl shadow-2xl border text-xs font-medium ${
               toast.type === 'success'
                 ? 'bg-emerald-950/90 text-emerald-200 border-emerald-500/40 shadow-emerald-500/10'
+                : toast.type === 'warning'
+                ? 'bg-amber-950/90 text-amber-200 border-amber-500/40 shadow-amber-500/10'
                 : toast.type === 'error'
                 ? 'bg-red-950/90 text-red-200 border-red-500/40 shadow-red-500/10'
                 : 'bg-slate-900/90 text-slate-200 border-slate-700 shadow-slate-500/10'
             } backdrop-blur-md`}
           >
-            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-            {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-red-400" />}
-            <span>{toast.message}</span>
+            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />}
+            {toast.type === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />}
+            {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />}
+            <span className="leading-relaxed">{toast.message}</span>
           </div>
         </div>
       )}

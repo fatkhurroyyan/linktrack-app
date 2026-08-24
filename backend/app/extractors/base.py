@@ -34,7 +34,11 @@ class SecurityValidator:
 
     @classmethod
     def validate_url(cls, url: str) -> str:
-        parsed = urllib.parse.urlparse(url.strip())
+        clean_input = url.strip()
+        if not clean_input.startswith("http://") and not clean_input.startswith("https://"):
+            clean_input = "https://" + clean_input
+
+        parsed = urllib.parse.urlparse(clean_input)
         
         if parsed.scheme not in ("http", "https"):
             raise ValueError(f"Skema URL '{parsed.scheme}' tidak didukung. Gunakan HTTP atau HTTPS.")
@@ -57,7 +61,7 @@ class SecurityValidator:
             # DNS resolution failed - could still be a valid external domain that will fail later gracefully
             pass
 
-        return url.strip()
+        return clean_input
 
 class BaseExtractor:
     async def extract(self, url: str) -> ExtractedContent:

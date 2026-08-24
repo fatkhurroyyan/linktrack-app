@@ -49,12 +49,20 @@ export interface BatchProcessError {
   error: string;
 }
 
+export interface BatchProcessDuplicate {
+  url: string;
+  title?: string;
+  message: string;
+}
+
 export interface BatchProcessResponse {
   total_submitted: number;
   successful: number;
   failed: number;
+  duplicates_count?: number;
   items: LinkItem[];
   errors: BatchProcessError[];
+  duplicates?: BatchProcessDuplicate[];
 }
 
 export interface AnalyticsStats {

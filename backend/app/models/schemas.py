@@ -110,12 +110,19 @@ class BatchProcessError(BaseModel):
     url: str
     error: str
 
+class BatchProcessDuplicate(BaseModel):
+    url: str
+    title: Optional[str] = None
+    message: str
+
 class BatchProcessResponse(BaseModel):
     total_submitted: int
     successful: int
     failed: int
+    duplicates_count: int = 0
     items: list[LinkItemResponse]
     errors: list[BatchProcessError]
+    duplicates: list[BatchProcessDuplicate] = []
 
 class AnalyticsStatsResponse(BaseModel):
     total_links: int

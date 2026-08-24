@@ -18,7 +18,7 @@ export const IngestionBar: React.FC<IngestionBarProps> = ({ onProcess, isLoading
     if (low.includes('github.com')) {
       return <Github className="w-5 h-5 text-purple-400 animate-bounce" />;
     }
-    if (low.startsWith('http://') || low.startsWith('https://')) {
+    if (low.length > 3) {
       return <Globe className="w-5 h-5 text-blue-400" />;
     }
     return <Link2 className="w-5 h-5 text-slate-500" />;
@@ -26,8 +26,10 @@ export const IngestionBar: React.FC<IngestionBarProps> = ({ onProcess, isLoading
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url.trim() || isLoading) return;
-    await onProcess(url.trim());
+    const clean = url.trim();
+    if (!clean || isLoading) return;
+    const normalized = clean.startsWith('http://') || clean.startsWith('https://') ? clean : `https://${clean}`;
+    await onProcess(normalized);
     setUrl('');
   };
 
@@ -46,10 +48,10 @@ export const IngestionBar: React.FC<IngestionBarProps> = ({ onProcess, isLoading
 
           {/* URL Input Box */}
           <input
-            type="url"
+            type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="Tempel tautan Google Drive, GitHub repo, atau link web apa saja..."
+            placeholder="Tempel tautan (misal: github.com/user/repo atau drive.google.com/...)"
             required
             className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none"
             disabled={isLoading}

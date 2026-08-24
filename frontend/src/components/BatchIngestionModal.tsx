@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Sparkles, Loader2, CheckCircle2, AlertTriangle, Layers } from 'lucide-react';
+import { X, Sparkles, Loader2, Layers } from 'lucide-react';
 import { BatchProcessResponse } from '../types/link';
 
 interface BatchIngestionModalProps {
@@ -16,30 +16,32 @@ export const BatchIngestionModal: React.FC<BatchIngestionModalProps> = ({
   isLoading,
 }) => {
   const [text, setText] = useState('');
-  const [batchResult, setBatchResult] = useState<BatchProcessResponse | null>(null);
 
   if (!isOpen) return null;
 
-  // Extract valid URLs from lines
+  // Extract and normalize URLs from lines (auto-prepend https:// if missing)
   const urls = text
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line.startsWith('http://') || line.startsWith('https://'));
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      if (line.startsWith('http://') || line.startsWith('https://')) {
+        return line;
+      }
+      return `https://${line}`;
+    });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (urls.length === 0 || isLoading) return;
     const res = await onProcessBatch(urls);
     if (res) {
-      setBatchResult(res);
-      if (res.failed === 0) {
-        setText('');
-      }
+      setText('');
+      onClose(); // Auto-close modal on finish
     }
   };
 
   const handleClose = () => {
-    setBatchResult(null);
     onClose();
   };
 
@@ -55,7 +57,7 @@ export const BatchIngestionModal: React.FC<BatchIngestionModalProps> = ({
             <div>
               <h2 className="text-base font-bold text-white">Batch Link Ingestion</h2>
               <p className="text-xs text-slate-400">
-                Tempel beberapa URL sekaligus (satu baris per URL) untuk kurasi massal.
+                Tempel beberapa tautan (satu baris per tautan, tanpa https:// juga bisa).
               </p>
             </div>
           </div>
@@ -73,46 +75,18 @@ export const BatchIngestionModal: React.FC<BatchIngestionModalProps> = ({
             <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
               <span>Daftar URL (Satu per baris):</span>
               <span className="font-mono text-brand-400 font-semibold">
-                {urls.length} URL terdeteksi
+                {urls.length} Tautan terdeteksi
               </span>
             </div>
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="https://github.com/facebook/react&#10;https://drive.google.com/drive/folders/12345...&#10;https://fastapi.tiangolo.com&#10;https://tailwindcss.com"
+              placeholder="github.com/facebook/react&#10;drive.google.com/drive/folders/12345...&#10;fastapi.tiangolo.com&#10;https://tailwindcss.com"
               rows={6}
               disabled={isLoading}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/30"
             />
           </div>
-
-          {/* Results Summary if completed */}
-          {batchResult && (
-            <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
-              <div className="flex items-center gap-4 text-xs">
-                <div className="flex items-center gap-1.5 text-emerald-400">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Berhasil: {batchResult.successful}</span>
-                </div>
-                {batchResult.failed > 0 && (
-                  <div className="flex items-center gap-1.5 text-amber-400">
-                    <AlertTriangle className="w-4 h-4" />
-                    <span>Gagal: {batchResult.failed}</span>
-                  </div>
-                )}
-              </div>
-
-              {batchResult.errors.length > 0 && (
-                <div className="text-[11px] space-y-1 text-red-400 max-h-24 overflow-y-auto">
-                  {batchResult.errors.map((err, i) => (
-                    <div key={i} className="truncate">
-                      • {err.url}: {err.error}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Action Buttons */}
           <div className="flex items-center justify-end gap-3 pt-2">

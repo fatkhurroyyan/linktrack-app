@@ -14,6 +14,7 @@ from app.models.schemas import (
     LinkListResponse,
     BatchProcessResponse,
     BatchProcessError,
+    BatchProcessDuplicate,
     GDriveFileDTO,
 )
 from app.services.orchestrator import link_orchestrator
@@ -66,7 +67,9 @@ async def process_single_link(
         item = await link_orchestrator.process_link(payload.url, db)
         return format_link_response(item)
     except ValueError as ve:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+        err_msg = str(ve)
+        status_code = status.HTTP_409_CONFLICT if "sudah pernah" in err_msg.lower() else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=err_msg)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Gagal memproses link: {str(e)}")
 
@@ -78,13 +81,18 @@ async def process_batch_links(
     """
     Process multiple URLs in batch mode.
     """
-    items, errors = await link_orchestrator.process_batch(payload.urls, db)
+    items, errors, duplicates = await link_orchestrator.process_batch(payload.urls, db)
     return BatchProcessResponse(
         total_submitted=len(payload.urls),
         successful=len(items),
         failed=len(errors),
+        duplicates_count=len(duplicates),
         items=[format_link_response(it) for it in items],
-        errors=[BatchProcessError(url=err["url"], error=err["error"]) for err in errors]
+        errors=[BatchProcessError(url=err["url"], error=err["error"]) for err in errors],
+        duplicates=[
+            BatchProcessDuplicate(url=d["url"], title=d.get("title"), message=d["message"])
+            for d in duplicates
+        ],
     )
 
 @router.get("", response_model=LinkListResponse)
