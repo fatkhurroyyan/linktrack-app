@@ -146,27 +146,75 @@ export const App: React.FC = () => {
     }
   };
 
-  // Handler: Update Link
+  // Handler: Update Link (Optimistic Instant Update without reload)
   const handleSaveDetail = async (id: string, updated: Partial<LinkItem>) => {
+    const previousLinks = [...links];
+
+    // 1. Instantly update local state
+    setLinks((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const nextPrimary =
+          updated.primary_category !== undefined
+            ? updated.primary_category
+            : item.primary_category;
+        const nextSecondary =
+          updated.secondary_category !== undefined
+            ? updated.secondary_category || undefined
+            : item.secondary_category;
+        const nextCategories: string[] = [];
+        if (nextPrimary) nextCategories.push(nextPrimary);
+        if (nextSecondary && nextSecondary !== nextPrimary) {
+          nextCategories.push(nextSecondary);
+        }
+        return {
+          ...item,
+          ...updated,
+          primary_category: nextPrimary,
+          secondary_category: nextSecondary,
+          categories: nextCategories,
+        };
+      })
+    );
+
     try {
-      await api.updateLink(id, updated);
+      // 2. Send update to server
+      const serverUpdated = await api.updateLink(id, updated);
+
+      // 3. Sync item with server response
+      setLinks((prev) =>
+        prev.map((item) => (item.id === id ? serverUpdated : item))
+      );
+
       showToast('success', 'Kategori & metadata berhasil diperbarui.');
-      await Promise.all([fetchLinks(), fetchMetadata(), fetchCategories()]);
+
+      // 4. Silently refresh category counters & metadata in background (no reload)
+      fetchCategories();
+      fetchMetadata();
     } catch (err) {
+      // Rollback on failure
+      setLinks(previousLinks);
       showToast('error', 'Gagal memperbarui metadata.');
     }
   };
 
-  // Handler: Delete Link
+  // Handler: Delete Link (Optimistic Instant Update)
   const handleDeleteLink = async (id: string) => {
     if (!window.confirm('Apakah Anda yakin ingin menghapus tautan ini dari basis pengetahuan?')) {
       return;
     }
+    const previousLinks = [...links];
+    setLinks((prev) => prev.filter((item) => item.id !== id));
+    setTotalCount((prev) => Math.max(0, prev - 1));
+
     try {
       await api.deleteLink(id);
       showToast('info', 'Tautan telah dihapus.');
-      await Promise.all([fetchLinks(), fetchMetadata(), fetchCategories()]);
+      fetchCategories();
+      fetchMetadata();
     } catch (err) {
+      setLinks(previousLinks);
+      setTotalCount(previousLinks.length);
       showToast('error', 'Gagal menghapus tautan.');
     }
   };
