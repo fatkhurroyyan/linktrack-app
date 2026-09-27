@@ -1,5 +1,11 @@
 import sys
 import os
+import traceback
+from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
+
+# Fallback app - Vercel needs `app` at module level
+app = FastAPI()
 
 # Add backend directory to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -7,27 +13,30 @@ backend_dir = os.path.abspath(os.path.join(current_dir, "..", "backend"))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
-# Import the FastAPI application instance
-from app.main import app
+_startup_error = None
 
-# Add debug endpoint to check env vars on Vercel
-from fastapi.responses import JSONResponse
-
-@app.get("/debug/env")
-async def debug_env():
-    from app.config import settings
-    db_url = settings.DATABASE_URL
-    # Mask sensitive parts
-    if "postgresql" in db_url or "postgres" in db_url:
-        masked = db_url[:30] + "...MASKED..."
-    elif "sqlite" in db_url:
-        masked = db_url  # sqlite is safe to show
-    else:
-        masked = "UNKNOWN TYPE"
+try:
+    from app.main import app as _real_app
+    # Success - replace fallback with real app
+    app = _real_app
     
-    return JSONResponse({
-        "database_url_type": "postgresql/supabase" if "postgres" in db_url else "sqlite" if "sqlite" in db_url else "other",
-        "database_url_masked": masked,
-        "has_DATABASE_URL_env": "DATABASE_URL" in os.environ,
-        "env_DATABASE_URL_starts_with": os.environ.get("DATABASE_URL", "NOT SET")[:25] + "..." if os.environ.get("DATABASE_URL") else "NOT SET",
-    })
+    # Add debug endpoint to real app
+    @app.get("/debug/env")
+    async def debug_env():
+        from app.config import settings
+        db_url = settings.DATABASE_URL
+        return {
+            "db_type": "supabase" if "postgres" in db_url else "sqlite",
+            "db_url_preview": db_url[:35] + "..." if len(db_url) > 35 else db_url,
+            "has_env_var": "DATABASE_URL" in os.environ,
+        }
+
+except Exception:
+    _startup_error = traceback.format_exc()
+
+    @app.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+    async def show_error(full_path: str):
+        return PlainTextResponse(
+            f"=== BACKEND STARTUP CRASH ===\n\n{_startup_error}",
+            status_code=500,
+        )
