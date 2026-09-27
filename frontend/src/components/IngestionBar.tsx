@@ -33,9 +33,7 @@ export const IngestionBar: React.FC<IngestionBarProps> = ({ onProcess, isLoading
     setUrl('');
   };
 
-  const setSampleUrl = (sample: string) => {
-    setUrl(sample);
-  };
+
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 my-4">

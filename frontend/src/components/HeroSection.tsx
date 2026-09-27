@@ -1,5 +1,5 @@
 import React from 'react';
-import { HardDrive, Github, Globe, Sparkles } from 'lucide-react';
+import { HardDrive, Github, Globe } from 'lucide-react';
 import { AnalyticsStats } from '../types/link';
 
 interface HeroSectionProps {
