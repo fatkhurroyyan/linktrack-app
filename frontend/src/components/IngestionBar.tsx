@@ -83,38 +83,7 @@ export const IngestionBar: React.FC<IngestionBarProps> = ({ onProcess, isLoading
         </div>
       </form>
 
-      {/* Quick Example Links Pills */}
-      <div className="flex flex-wrap items-center justify-center gap-2 mt-3 text-xs text-slate-400">
-        <span className="text-slate-500">Coba contoh tautan:</span>
-        <button
-          type="button"
-          onClick={() => setSampleUrl('https://github.com/facebook/react')}
-          className="px-2.5 py-1 rounded-lg bg-slate-900/60 hover:bg-slate-800 text-purple-300 border border-slate-800 transition-colors"
-        >
-          React (GitHub)
-        </button>
-        <button
-          type="button"
-          onClick={() => setSampleUrl('https://github.com/fastapi/fastapi')}
-          className="px-2.5 py-1 rounded-lg bg-slate-900/60 hover:bg-slate-800 text-emerald-300 border border-slate-800 transition-colors"
-        >
-          FastAPI (GitHub)
-        </button>
-        <button
-          type="button"
-          onClick={() => setSampleUrl('https://drive.google.com/drive/folders/1wK9_samplePublicFolder')}
-          className="px-2.5 py-1 rounded-lg bg-slate-900/60 hover:bg-slate-800 text-amber-300 border border-slate-800 transition-colors"
-        >
-          Google Drive Folder
-        </button>
-        <button
-          type="button"
-          onClick={() => setSampleUrl('https://tailwindcss.com/docs/utility-first')}
-          className="px-2.5 py-1 rounded-lg bg-slate-900/60 hover:bg-slate-800 text-blue-300 border border-slate-800 transition-colors"
-        >
-          Tailwind CSS (Web)
-        </button>
-      </div>
+
     </div>
   );
 };
