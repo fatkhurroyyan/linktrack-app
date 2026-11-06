@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, delete, update
+from sqlalchemy import select, func, or_, and_, case, update
 from typing import Optional
 
 from app.database.session import get_db
@@ -14,32 +14,19 @@ async def list_categories(db: AsyncSession = Depends(get_db)):
     """
     Retrieve all categories along with their real-time usage count across links.
     """
-    stmt = select(Category).order_by(Category.is_system.desc(), Category.name.asc())
-    res = await db.execute(stmt)
-    categories = res.scalars().all()
-
-    # Calculate usage count for each category
-    result = []
-    for cat in categories:
-        count_stmt = select(func.count(LinkItem.id)).where(
-            or_(
-                LinkItem.primary_category == cat.name,
-                LinkItem.secondary_category == cat.name
-            )
-        )
-        count_res = await db.execute(count_stmt)
-        usage = count_res.scalar_one()
-
-        result.append(
-            CategoryResponse(
-                id=cat.id,
-                name=cat.name,
-                is_system=cat.is_system,
-                usage_count=usage,
-                created_at=cat.created_at,
-            )
-        )
-    return result
+    # Count both category slots in one round trip, including unused categories.
+    # The OR join counts a link once even if both slots contain the same name.
+    stmt = (
+        select(Category, func.count(LinkItem.id).label("usage_count"))
+        .outerjoin(LinkItem, or_(LinkItem.primary_category == Category.name,
+                                LinkItem.secondary_category == Category.name))
+        .group_by(Category.id, Category.name, Category.is_system, Category.created_at)
+        .order_by(Category.is_system.desc(), Category.name.asc())
+    )
+    rows = (await db.execute(stmt)).all()
+    return [CategoryResponse(id=cat.id, name=cat.name, is_system=cat.is_system,
+                             usage_count=usage, created_at=cat.created_at)
+            for cat, usage in rows]
 
 @router.post("", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
 async def create_category(
@@ -68,7 +55,6 @@ async def create_category(
     new_cat = Category(name=cat_name, is_system=False)
     db.add(new_cat)
     await db.commit()
-    await db.refresh(new_cat)
 
     return CategoryResponse(
         id=new_cat.id,
@@ -163,28 +149,28 @@ async def delete_category(
 
     # If force is true and usage > 0, clean up references
     if usage > 0 and force:
-        # For secondary category, set to None
+        # Reassign affected links in one UPDATE without loading every link's
+        # tags/files. CASE uses the original secondary value before clearing it.
         await db.execute(
             update(LinkItem)
-            .where(LinkItem.secondary_category == cat.name)
-            .values(secondary_category=None)
+            .where(or_(LinkItem.primary_category == cat.name,
+                       LinkItem.secondary_category == cat.name))
+            .values(
+                primary_category=case(
+                    (LinkItem.primary_category == cat.name, case(
+                        (and_(LinkItem.secondary_category.isnot(None),
+                              LinkItem.secondary_category != "",
+                              LinkItem.secondary_category != cat.name), LinkItem.secondary_category),
+                        (LinkItem.platform.ilike("%drive%"), "GDrive"),
+                        (LinkItem.platform.ilike("%github%"), "GitHub"),
+                        else_="Produktivitas & Tools",
+                    )),
+                    else_=LinkItem.primary_category,
+                ),
+                secondary_category=None,
+            )
+            .execution_options(synchronize_session=False)
         )
-
-        # For primary category, replace with secondary if exists, or fallback based on platform
-        primary_links_stmt = select(LinkItem).where(LinkItem.primary_category == cat.name)
-        primary_links_res = await db.execute(primary_links_stmt)
-        primary_links = primary_links_res.scalars().all()
-
-        for link in primary_links:
-            if link.secondary_category and link.secondary_category != cat.name:
-                link.primary_category = link.secondary_category
-                link.secondary_category = None
-            elif "drive" in link.platform.lower():
-                link.primary_category = "GDrive"
-            elif "github" in link.platform.lower():
-                link.primary_category = "GitHub"
-            else:
-                link.primary_category = "Produktivitas & Tools"
 
     # Delete category
     await db.delete(cat)

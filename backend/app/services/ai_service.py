@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 import logging
@@ -36,7 +37,12 @@ class AIService:
         # If Gemini API Key is configured, use Gemini LLM
         if client:
             try:
-                return await self._call_gemini(client, content, available_categories)
+                # Bound the complete primary/fallback sequence, not each retry.
+                # Scraping has its own timeout; leave time to persist the result.
+                return await asyncio.wait_for(
+                    self._call_gemini(client, content, available_categories),
+                    timeout=settings.REQUEST_TIMEOUT_SECONDS,
+                )
             except Exception as e:
                 logger.warning(f"Gemini API call failed, falling back to heuristic categorization: {e}")
 
@@ -88,7 +94,7 @@ class AIService:
         )
 
         try:
-            response = client.models.generate_content(
+            response = await client.aio.models.generate_content(
                 model=settings.GEMINI_MODEL,
                 contents=prompt,
                 config=types.GenerateContentConfig(
@@ -114,7 +120,7 @@ class AIService:
         except Exception as e:
             # Fallback to secondary model if primary fails
             if settings.GEMINI_FALLBACK_MODEL and settings.GEMINI_FALLBACK_MODEL != settings.GEMINI_MODEL:
-                response = client.models.generate_content(
+                response = await client.aio.models.generate_content(
                     model=settings.GEMINI_FALLBACK_MODEL,
                     contents=prompt,
                     config=types.GenerateContentConfig(

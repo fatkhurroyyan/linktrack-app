@@ -10,6 +10,7 @@ import { LinkTable } from './components/LinkTable';
 import { DetailModal } from './components/DetailModal';
 import { StatsOverview } from './components/StatsOverview';
 import { api } from './services/api';
+import { applyLinkUpdate, matchesFilters, mergeCreatedLinks, removeCategoryFromLink } from './utils/collection';
 import {
   LinkItem,
   AnalyticsStats,
@@ -34,6 +35,17 @@ export const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const linkRequest = useRef(0);
+  const categoryRequest = useRef(0);
+  const statsRequest = useRef(0);
+  const linksAbort = useRef<AbortController>();
+  const pendingWrites = useRef(0);
+  const pendingLinkIds = useRef(new Set<string>());
+  const linksRef = useRef(links);
+  linksRef.current = links;
+  const refreshTimer = useRef<ReturnType<typeof setTimeout>>();
+  const refreshFlags = useRef({ links: false, metadata: false });
+  const refreshCollection = useRef<() => void>(() => {});
+  const refreshMetadata = useRef<() => void>(() => {});
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
@@ -83,223 +95,242 @@ export const App: React.FC = () => {
     limit: 100,
   });
 
-  // Fetch Links
-  const fetchLinks = useCallback(async () => {
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
+  // Foreground reads show a skeleton; background reconciliation keeps the
+  // collection visible. Ignore responses started before a mutation.
+  const fetchLinks = useCallback(async (background = false) => {
+    if (pendingWrites.current > 0) {
+      refreshFlags.current.links = true;
+      return;
+    }
+    linksAbort.current?.abort();
+    const controller = new AbortController();
+    linksAbort.current = controller;
     const request = ++linkRequest.current;
-    setIsLoading(true);
-    setLoadError('');
+    if (!background) { setIsLoading(true); setLoadError(''); }
+    else setIsLoading(false);
     try {
-      const data = await api.getLinks(filters);
+      const data = await api.getLinks(filters, controller.signal);
       if (request !== linkRequest.current) return;
       setLinks(Array.isArray(data?.items) ? data.items : []);
       setTotalCount(typeof data?.total === 'number' ? data.total : 0);
     } catch {
-      if (request === linkRequest.current) setLoadError('Koleksi belum dapat dimuat. Periksa koneksi, lalu coba lagi.');
+      if (request === linkRequest.current && !controller.signal.aborted && !background) {
+        setLoadError('Koleksi belum dapat dimuat. Periksa koneksi, lalu coba lagi.');
+      }
     } finally {
-      if (request === linkRequest.current) setIsLoading(false);
+      if (request === linkRequest.current && !background) setIsLoading(false);
+      if (linksAbort.current === controller) linksAbort.current = undefined;
     }
   }, [filters]);
 
-  // Fetch Categories
   const fetchCategories = useCallback(async () => {
+    const request = ++categoryRequest.current;
     try {
       const data = await api.getCategories();
-      if (Array.isArray(data)) {
-        setCategories(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch categories:', err);
-    }
+      if (request === categoryRequest.current && pendingWrites.current === 0 && Array.isArray(data)) setCategories(data);
+    } catch { /* Keep the last confirmed categories if background refresh fails. */ }
   }, []);
 
-  // Fetch Analytics & Health
-  const fetchMetadata = async () => {
+  const fetchStats = useCallback(async () => {
+    const request = ++statsRequest.current;
     try {
-      const [analyticsData, healthData] = await Promise.allSettled([
-        api.getAnalytics(),
-        api.getHealth(),
-      ]);
-      if (analyticsData.status === 'fulfilled') {
-        setStats(analyticsData.value);
-      }
-      if (healthData.status === 'fulfilled') {
-        setHealth(healthData.value);
-      }
-    } catch (err) {
-      console.error('Failed to fetch metadata:', err);
-    }
+      const data = await api.getAnalytics();
+      if (request === statsRequest.current && pendingWrites.current === 0) setStats(data);
+    } catch { /* A failed statistics refresh must not hide saved links. */ }
+  }, []);
+
+  refreshCollection.current = () => { void fetchLinks(true); };
+  refreshMetadata.current = () => { void fetchCategories(); void fetchStats(); };
+
+  const beginMutation = () => {
+    pendingWrites.current += 1;
+    ++linkRequest.current;
+    ++categoryRequest.current;
+    ++statsRequest.current;
+    // Preserve reconciliation work if this write interrupts an older refresh.
+    if (linksAbort.current && !linksAbort.current.signal.aborted) refreshFlags.current.links = true;
+    linksAbort.current?.abort();
+    clearTimeout(refreshTimer.current);
+    setIsLoading(false);
+  };
+
+  const finishMutation = (refreshLinks = false) => {
+    pendingWrites.current -= 1;
+    refreshFlags.current.links ||= refreshLinks;
+    refreshFlags.current.metadata = true;
+    if (pendingWrites.current > 0) return;
+    clearTimeout(refreshTimer.current);
+    // Combine rapid edits into one refresh, outside the mutation's wait path.
+    refreshTimer.current = setTimeout(() => {
+      const dirty = refreshFlags.current;
+      refreshFlags.current = { links: false, metadata: false };
+      if (dirty.links) refreshCollection.current();
+      if (dirty.metadata) refreshMetadata.current();
+    }, 120);
   };
 
   useEffect(() => {
-    fetchMetadata();
-    fetchCategories();
-  }, [fetchCategories]);
+    void fetchCategories();
+    void fetchStats();
+    // Health does not change when a link or category changes.
+    let active = true;
+    void api.getHealth().then((data) => { if (active) setHealth(data); }).catch(() => {});
+    return () => {
+      active = false;
+      ++categoryRequest.current;
+      ++statsRequest.current;
+      clearTimeout(refreshTimer.current);
+    };
+  }, [fetchCategories, fetchStats]);
 
   useEffect(() => {
     const timer = setTimeout(() => { void fetchLinks(); }, filters.query ? 250 : 0);
-    return () => { clearTimeout(timer); linkRequest.current += 1; };
+    return () => { clearTimeout(timer); ++linkRequest.current; linksAbort.current?.abort(); };
   }, [fetchLinks, filters.query]);
 
-  // Handler: Process Single Link
+  const insertCreatedItems = (items: LinkItem[]) => {
+    const currentFilters = filtersRef.current;
+    const existingIds = new Set(linksRef.current.map((item) => item.id));
+    const newMatches = items.filter((item) => !existingIds.has(item.id) && matchesFilters(item, currentFilters));
+    setLinks((previous) => mergeCreatedLinks(previous, items, currentFilters));
+    setTotalCount((previous) => previous + newMatches.length);
+    setLoadError('');
+  };
+
   const handleProcessLink = async (url: string): Promise<boolean> => {
+    beginMutation();
     setIsProcessing(true);
     try {
-      const newItem = await api.processLink(url);
-      showToast('success', `Berhasil mengurasi: "${newItem.title}"`);
-      await Promise.all([fetchLinks(), fetchMetadata(), fetchCategories()]);
+      const item = await api.processLink(url);
+      insertCreatedItems([item]);
+      showToast('success', `Berhasil mengurasi: "${item.title}"`);
       return true;
     } catch (err: any) {
-      const errMsg = err.response?.data?.detail || 'Gagal memproses tautan.';
-      const isDuplicate = err.response?.status === 409 || errMsg.toLowerCase().includes('sudah pernah');
-      if (isDuplicate) {
-        showToast('warning', errMsg, 6000);
-      } else {
-        showToast('error', errMsg);
-      }
+      const message = err.response?.data?.detail || 'Gagal memproses tautan.';
+      const duplicate = err.response?.status === 409 || String(message).toLowerCase().includes('sudah pernah');
+      showToast(duplicate ? 'warning' : 'error', message, duplicate ? 6000 : 4500);
       return false;
     } finally {
       setIsProcessing(false);
+      finishMutation(true);
     }
   };
 
-  // Handler: Process Batch Links
   const handleProcessBatch = async (urls: string[]): Promise<BatchProcessResponse | null> => {
+    beginMutation();
     setIsProcessing(true);
     try {
-      const res = await api.processBatch(urls);
-      const dupCount = res.duplicates_count ?? (res.duplicates ? res.duplicates.length : 0);
-      const dupList = res.duplicates || [];
-
-      if (res.successful > 0 && dupCount === 0) {
-        showToast('success', `Berhasil menambahkan ${res.successful} tautan baru.`);
-      } else if (res.successful > 0 && dupCount > 0) {
-        const dupNames = dupList.map((d) => d.title || d.url).join(', ');
-        showToast(
-          'warning',
-          `Berhasil menambahkan ${res.successful} tautan baru. ${dupCount} tautan dilewati karena sudah pernah Anda masukkan: ${dupNames}`,
-          7500
-        );
-      } else if (res.successful === 0 && dupCount > 0) {
-        const dupNames = dupList.map((d) => d.title || d.url).join(', ');
-        showToast(
-          'warning',
-          `Semua (${dupCount}) tautan dilewati karena sudah pernah Anda masukkan sebelumnya: ${dupNames}`,
-          7500
-        );
+      const result = await api.processBatch(urls);
+      insertCreatedItems(result.items);
+      const duplicates = result.duplicates_count ?? result.duplicates?.length ?? 0;
+      if (result.successful > 0) {
+        showToast(duplicates || result.failed ? 'warning' : 'success', `Berhasil menambahkan ${result.successful} tautan baru.${duplicates ? ` ${duplicates} tautan duplikat dilewati.` : ''}${result.failed ? ` ${result.failed} tautan gagal diproses.` : ''}`);
+      } else if (duplicates > 0) {
+        showToast('warning', `Semua (${duplicates}) tautan sudah pernah disimpan dan dilewati.`, 6000);
       } else {
-        showToast('error', `Batch selesai: ${res.failed} tautan gagal diproses.`);
+        showToast('error', `Batch selesai: ${result.failed} tautan gagal diproses.`);
       }
-
-      await Promise.all([fetchLinks(), fetchMetadata(), fetchCategories()]);
-      return res;
-    } catch (err: any) {
+      return result;
+    } catch {
       showToast('error', 'Gagal memproses batch link.');
       return null;
     } finally {
       setIsProcessing(false);
+      finishMutation(true);
     }
   };
 
-  // Handler: Update Link (Optimistic Instant Update without reload)
   const handleSaveDetail = async (id: string, updated: Partial<LinkItem>): Promise<boolean> => {
-    const previousLinks = [...links];
-
-    // 1. Instantly update local state
-    setLinks((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item;
-        const nextPrimary =
-          updated.primary_category !== undefined
-            ? updated.primary_category
-            : item.primary_category;
-        const nextSecondary =
-          updated.secondary_category !== undefined
-            ? updated.secondary_category || undefined
-            : item.secondary_category;
-        const nextCategories: string[] = [];
-        if (nextPrimary) nextCategories.push(nextPrimary);
-        if (nextSecondary && nextSecondary !== nextPrimary) {
-          nextCategories.push(nextSecondary);
-        }
-        return {
-          ...item,
-          ...updated,
-          primary_category: nextPrimary,
-          secondary_category: nextSecondary,
-          categories: nextCategories,
-        };
-      })
-    );
-
-    try {
-      // 2. Send update to server
-      const serverUpdated = await api.updateLink(id, updated);
-
-      // 3. Sync item with server response
-      setLinks((prev) =>
-        prev.map((item) => (item.id === id ? serverUpdated : item))
-      );
-
-      showToast('success', 'Kategori & metadata berhasil diperbarui.');
-
-      // 4. Silently refresh category counters & metadata in background (no reload)
-      fetchCategories();
-      fetchMetadata();
-      return true;
-    } catch (err) {
-      // Rollback on failure
-      setLinks(previousLinks);
-      showToast('error', 'Gagal memperbarui metadata.');
+    if (pendingLinkIds.current.has(id)) {
+      showToast('info', 'Perubahan tautan ini masih disimpan. Tunggu sebentar.');
       return false;
     }
+    const previousItem = linksRef.current.find((item) => item.id === id);
+    pendingLinkIds.current.add(id);
+    beginMutation();
+    setLinks((previous) => previous.map((item) => item.id === id ? applyLinkUpdate(item, updated) : item));
+    try {
+      const item = await api.updateLink(id, updated);
+      setLinks((previous) => previous.map((entry) => entry.id === id ? item : entry));
+      showToast('success', 'Kategori & metadata berhasil diperbarui.');
+      return true;
+    } catch {
+      // Roll back only this item; preserve concurrent changes to other links.
+      if (previousItem) setLinks((previous) => previous.map((item) => item.id === id ? previousItem : item));
+      showToast('error', 'Gagal memperbarui metadata.');
+      return false;
+    } finally {
+      pendingLinkIds.current.delete(id);
+      finishMutation(true);
+    }
   };
 
-  // Handler: Delete Link (Optimistic Instant Update)
   const handleDeleteLink = async (id: string) => {
-    if (!window.confirm('Apakah Anda yakin ingin menghapus tautan ini dari basis pengetahuan?')) {
+    if (pendingLinkIds.current.has(id)) {
+      showToast('info', 'Perubahan tautan ini masih disimpan. Tunggu sebentar.');
       return;
     }
-    const previousLinks = [...links];
-    setLinks((prev) => prev.filter((item) => item.id !== id));
-    setTotalCount((prev) => Math.max(0, prev - 1));
-
+    if (!window.confirm('Apakah Anda yakin ingin menghapus tautan ini dari basis pengetahuan?')) return;
+    const index = linksRef.current.findIndex((item) => item.id === id);
+    const previousItem = linksRef.current[index];
+    if (!previousItem) return;
+    pendingLinkIds.current.add(id);
+    beginMutation();
+    setLinks((previous) => previous.filter((item) => item.id !== id));
+    setTotalCount((previous) => Math.max(0, previous - 1));
     try {
       await api.deleteLink(id);
       showToast('info', 'Tautan telah dihapus.');
-      fetchCategories();
-      fetchMetadata();
-    } catch (err) {
-      setLinks(previousLinks);
-      setTotalCount(previousLinks.length);
+    } catch {
+      setLinks((previous) => {
+        if (previous.some((item) => item.id === id)) return previous;
+        const restored = [...previous];
+        restored.splice(Math.min(index, restored.length), 0, previousItem);
+        return restored;
+      });
+      setTotalCount((previous) => previous + 1);
       showToast('error', 'Gagal menghapus tautan.');
+    } finally {
+      pendingLinkIds.current.delete(id);
+      finishMutation(true);
     }
   };
 
-  // Handler: Create Category
   const handleCreateCategory = async (name: string): Promise<boolean> => {
+    beginMutation();
     try {
-      await api.createCategory(name);
+      const category = await api.createCategory(name);
+      setCategories((previous) => [...previous.filter((item) => item.id !== category.id), category]);
       showToast('success', `Kategori "${name}" berhasil dibuat.`);
-      await fetchCategories();
       return true;
     } catch (err: any) {
-      const msg = err.response?.data?.detail || 'Gagal membuat kategori.';
-      showToast('error', msg);
+      showToast('error', err.response?.data?.detail || 'Gagal membuat kategori.');
       return false;
+    } finally {
+      finishMutation();
     }
   };
 
-  // Handler: Delete Category
-  const handleDeleteCategory = async (id: string, force: boolean = false): Promise<boolean> => {
+  const handleDeleteCategory = async (id: string, force = false): Promise<boolean> => {
+    const category = categories.find((item) => item.id === id);
+    beginMutation();
     try {
-      const res = await api.deleteCategory(id, force);
-      showToast('info', res.message || 'Kategori berhasil dihapus.');
-      await Promise.all([fetchCategories(), fetchLinks(), fetchMetadata()]);
+      const result = await api.deleteCategory(id, force);
+      setCategories((previous) => previous.filter((item) => item.id !== id));
+      if (category) {
+        setLinks((previous) => previous.map((item) => removeCategoryFromLink(item, category.name)));
+        setFilters((previous) => previous.category === category.name ? { ...previous, category: 'All', page: 1 } : previous);
+      }
+      showToast('info', result.message || 'Kategori berhasil dihapus.');
       return true;
     } catch (err: any) {
-      const msg = err.response?.data?.detail?.message || err.response?.data?.detail || 'Gagal menghapus kategori.';
-      showToast('error', msg);
+      showToast('error', err.response?.data?.detail?.message || err.response?.data?.detail || 'Gagal menghapus kategori.');
       return false;
+    } finally {
+      finishMutation(true);
     }
   };
 

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 from datetime import datetime, timezone, timedelta
 
 from app.database.session import get_db
@@ -14,15 +14,18 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     """
     Returns high-level statistics for the dashboard analytics cards.
     """
-    # 1. Total Links
-    total_stmt = select(func.count(LinkItem.id))
-    total_res = await db.execute(total_stmt)
-    total_links = total_res.scalar_one()
-
-    # 2. Platform Breakdown
-    platform_stmt = select(LinkItem.platform, func.count(LinkItem.id)).group_by(LinkItem.platform)
+    # Total, platform, and recent counts share one scan and one round trip.
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    platform_stmt = select(
+        LinkItem.platform,
+        func.count(LinkItem.id),
+        func.sum(case((LinkItem.created_at >= seven_days_ago, 1), else_=0)),
+    ).group_by(LinkItem.platform)
     platform_res = await db.execute(platform_stmt)
-    platform_counts = {p: count for p, count in platform_res.all()}
+    rows = platform_res.all()
+    platform_counts = {p: count for p, count, _ in rows}
+    total_links = sum(count for _, count, _ in rows)
+    recent_count_7d = sum(recent or 0 for _, _, recent in rows)
 
     # Ensure all primary platforms exist in dict
     for p in ["Google Drive", "GitHub", "Web"]:
@@ -38,12 +41,6 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     tag_stmt = select(LinkTag.tag_name, func.count(LinkTag.id)).group_by(LinkTag.tag_name).order_by(func.count(LinkTag.id).desc()).limit(10)
     tag_res = await db.execute(tag_stmt)
     top_tags = [{"tag": t, "count": cnt} for t, cnt in tag_res.all()]
-
-    # 5. Recent count (last 7 days)
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
-    recent_stmt = select(func.count(LinkItem.id)).where(LinkItem.created_at >= seven_days_ago)
-    recent_res = await db.execute(recent_stmt)
-    recent_count_7d = recent_res.scalar_one()
 
     return AnalyticsStatsResponse(
         total_links=total_links,

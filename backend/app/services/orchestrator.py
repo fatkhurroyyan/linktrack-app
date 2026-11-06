@@ -116,7 +116,8 @@ class LinkOrchestrator:
             db.add(item)
 
         await db.commit()
-        await db.refresh(item)
+        # Python defaults and child objects are populated by flush/commit, and
+        # expire_on_commit=False preserves them without three extra SELECTs.
         return item
 
     async def process_batch(

@@ -33,7 +33,7 @@ export const api = {
   },
 
   // Get Links with filtering, search, pagination, and sorting
-  getLinks: async (filters: Partial<FilterState>): Promise<LinkListResponse> => {
+  getLinks: async (filters: Partial<FilterState>, signal?: AbortSignal): Promise<LinkListResponse> => {
     const params = new URLSearchParams();
     if (filters.query) params.append('query', filters.query);
     if (filters.platform && filters.platform !== 'All') params.append('platform', filters.platform);
@@ -44,7 +44,7 @@ export const api = {
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.limit) params.append('limit', filters.limit.toString());
 
-    const res = await apiClient.get<LinkListResponse>(`/links?${params.toString()}`);
+    const res = await apiClient.get<LinkListResponse>(`/links?${params.toString()}`, { signal });
     return res.data;
   },
 

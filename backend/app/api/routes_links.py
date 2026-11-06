@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, func, desc, asc
+from sqlalchemy import select, or_, func, desc, asc, delete
 from sqlalchemy.orm import selectinload
 from typing import Optional
 
 from app.database.session import get_db
-from app.models.link_item import LinkItem, LinkTag
+from app.models.link_item import LinkItem, LinkTag, GDriveFile
 from app.models.schemas import (
     LinkProcessRequest,
     LinkBatchProcessRequest,
@@ -273,12 +273,13 @@ async def update_link(
     if payload.summary is not None:
         item.summary = payload.summary
     if payload.tags is not None:
-        item.tags.clear()
-        for tag_text in payload.tags:
-            item.tags.append(LinkTag(tag_name=tag_text.strip().lower()))
+        tag_names = [tag.strip().lower() for tag in payload.tags]
+        if [tag.tag_name for tag in item.tags] != tag_names:
+            item.tags = [LinkTag(tag_name=name) for name in tag_names]
 
     await db.commit()
-    await db.refresh(item)
+    # expire_on_commit=False keeps the loaded tags/files; refreshing the whole
+    # object would issue three more SELECTs after every edit.
     return format_link_response(item)
 
 @router.delete("/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -286,12 +287,17 @@ async def delete_link(
     link_id: str,
     db: AsyncSession = Depends(get_db)
 ):
-    stmt = select(LinkItem).where(LinkItem.id == link_id)
+    # Do not eager-load every tag and Drive file just to delete the parent.
+    stmt = select(LinkItem.id).where(LinkItem.id == link_id)
     res = await db.execute(stmt)
     item = res.scalars().first()
     if not item:
         raise HTTPException(status_code=404, detail="Item tautan tidak ditemukan.")
 
-    await db.delete(item)
+    # Explicit child deletes also work with older SQLite databases where
+    # foreign-key cascading may not be enabled. Keep all deletes atomic.
+    await db.execute(delete(LinkTag).where(LinkTag.link_id == link_id))
+    await db.execute(delete(GDriveFile).where(GDriveFile.link_id == link_id))
+    await db.execute(delete(LinkItem).where(LinkItem.id == link_id))
     await db.commit()
     return None
