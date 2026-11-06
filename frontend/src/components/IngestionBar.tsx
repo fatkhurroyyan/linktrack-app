@@ -1,87 +1,44 @@
 import React, { useState } from 'react';
-import { Link2, Sparkles, Loader2, HardDrive, Github, Globe, ArrowRight } from 'lucide-react';
+import { Link2, Sparkles, ArrowRight } from 'lucide-react';
 
 interface IngestionBarProps {
-  onProcess: (url: string) => Promise<void>;
+  onProcess: (url: string) => Promise<boolean>;
   isLoading: boolean;
 }
 
 export const IngestionBar: React.FC<IngestionBarProps> = ({ onProcess, isLoading }) => {
   const [url, setUrl] = useState('');
-
-  // Auto-detect platform icon as user types
-  const getPlatformIcon = () => {
-    const low = url.toLowerCase();
-    if (low.includes('drive.google.com') || low.includes('docs.google.com')) {
-      return <HardDrive className="w-5 h-5 text-amber-400 animate-bounce" />;
-    }
-    if (low.includes('github.com')) {
-      return <Github className="w-5 h-5 text-purple-400 animate-bounce" />;
-    }
-    if (low.length > 3) {
-      return <Globe className="w-5 h-5 text-blue-400" />;
-    }
-    return <Link2 className="w-5 h-5 text-slate-500" />;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const [error, setError] = useState('');
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (isLoading) return;
     const clean = url.trim();
-    if (!clean || isLoading) return;
-    const normalized = clean.startsWith('http://') || clean.startsWith('https://') ? clean : `https://${clean}`;
-    await onProcess(normalized);
-    setUrl('');
+    const normalized = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+    try {
+      const parsed = new URL(normalized);
+      if (!clean || !parsed.hostname.includes('.') || !['https:', 'http:'].includes(parsed.protocol)) throw new Error();
+    } catch {
+      setError('Masukkan tautan yang valid, misalnya github.com/facebook/react.');
+      document.getElementById('link-url')?.focus();
+      return;
+    }
+    setError('');
+    const success = await onProcess(normalized);
+    if (success) setUrl('');
   };
-
-
-
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 my-4">
-      <form onSubmit={handleSubmit} className="relative">
-        <div className="relative flex items-center rounded-2xl bg-slate-900/90 border border-slate-800 p-2 shadow-2xl focus-within:border-brand-500/60 focus-within:ring-2 focus-within:ring-brand-500/20 transition-all">
-          {/* Left Platform Icon Indicator */}
-          <div className="pl-3 pr-2 flex items-center justify-center">
-            {getPlatformIcon()}
-          </div>
-
-          {/* URL Input Box */}
-          <input
-            type="text"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="Tempel tautan (misal: github.com/user/repo atau drive.google.com/...)"
-            required
-            className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none"
-            disabled={isLoading}
-          />
-
-          {/* Submit Action Button */}
-          <button
-            type="submit"
-            disabled={!url.trim() || isLoading}
-            className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-bold text-white transition-all shadow-glow ${
-              !url.trim() || isLoading
-                ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-brand-600 to-emerald-600 hover:from-brand-500 hover:to-emerald-500 active:scale-95'
-            }`}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin text-white" />
-                <span>Menganalisis...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 text-emerald-200" />
-                <span>Analisis & Kurasi AI</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </>
-            )}
-          </button>
-        </div>
-      </form>
-
-
-    </div>
+    <form onSubmit={handleSubmit} className="ingestion-form" aria-busy={isLoading}>
+      <label htmlFor="link-url">Simpan ide berikutnya</label>
+      <div className="ingestion-field">
+        <Link2 className="input-leading-icon" size={19} aria-hidden="true" />
+        <input id="link-url" name="url" type="text" inputMode="url" autoComplete="url" spellCheck={false} value={url} onChange={(event) => { setUrl(event.target.value); setError(''); }} placeholder="Tempel tautan favoritmu di sini…" disabled={isLoading} aria-invalid={Boolean(error)} aria-describedby={error ? 'ingestion-error' : 'ingestion-hint'} />
+        <button className="button button-primary ingestion-submit" type="submit" disabled={isLoading}>
+          <Sparkles size={16} aria-hidden="true" /><span>{isLoading ? 'Menganalisis…' : 'Analisis & Kurasi AI'}</span>{!isLoading && <ArrowRight size={16} aria-hidden="true" />}
+        </button>
+      </div>
+      <p id={error ? 'ingestion-error' : 'ingestion-hint'} className={`form-hint ${error ? 'field-error' : ''}`} role={error ? 'alert' : undefined}>
+        {error || (isLoading ? 'AI sedang membaca dan mengelompokkan tautanmu. Tunggu sebentar…' : 'Google Drive, GitHub, atau situs web. Tautanmu jadi lebih mudah ditemukan.')}
+      </p>
+    </form>
   );
 };

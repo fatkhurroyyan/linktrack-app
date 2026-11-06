@@ -1,16 +1,34 @@
 <!doctype html>
-<html lang="id" class="dark">
+<html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="https://api.iconify.design/lucide:sparkles.svg?color=%2322c55e" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#edf5f5" />
+    <meta name="description" content="Simpan, kurasi, dan temukan kembali tautan Google Drive, GitHub, dan situs web dalam koleksi LinkSense AI." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preload" href="/fonts/jakarta-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin />
     <title>LinkSense AI</title>
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+      (function () {
+        var theme;
+        try { theme = localStorage.getItem('linksense-theme'); } catch (error) {}
+        if (theme !== 'light' && theme !== 'dark') theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#152c33' : '#edf5f5';
+      })();
+    </script>
   </head>
-  <body class="bg-slate-950 text-slate-100 min-h-screen selection:bg-brand-500 selection:text-white font-sans antialiased">
+  <body>
+    <!-- THESIS: A friendly, practical library for finding saved ideas.
+    OWN-WORLD: Luminux-inspired cyan, teal outlines, yellow actions, rounded type.
+    STORY: Paste a URL, let AI curate it, then find it through sources and filters.
+    FIRST VIEWPORT: Left-aligned heading and URL form; original companion at right.
+    Source tabs lead to search, category/sort controls, and the resource collection.
+    Mobile stacks the task and hides the decorative companion. Motion is feedback.
+    FORM: User-pinned reference overrides generated directions; seed e53a908c.
+    FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

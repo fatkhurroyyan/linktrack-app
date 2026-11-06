@@ -1,0 +1,8 @@
+{
+  "asset": "library-companion.webp",
+  "purpose": "Original decorative knowledge-library companion for the LinkSense AI URL form",
+  "createdWith": "Built-in image_gen tool",
+  "date": "2026-11-06",
+  "processing": "Resized to 600px wide and converted to WebP with alpha preserved using FFmpeg",
+  "prompt": "Use case: stylized-concept. Create one original friendly little knowledge-library robot mascot, a polished soft 3D clay illustration for a pastel web application called LinkSense AI. The compact round robot has a pale icy cyan body, a dark desaturated teal face with two simple friendly eyes, a little pale-yellow bookmark antenna, small rounded hands gently carrying two interlocked chunky pale-yellow chain links. It sits on a small tidy stack of two rounded books, one dusty cyan, one pale butter yellow. Three-quarter front view, entire character and books visible, centered square composition with generous empty margin. Sophisticated friendly toy-like forms, matte clay texture, soft studio lighting, restrained colors #2B5B6E #A2D2DF #F7D070 #EDF5F5. No words, no letters, no logo, no screen UI, no orbit lines, no floating confetti, no gradients in background. Genuinely transparent background and clean alpha edges. It will appear at 230px in a functional productivity app. Save the generated asset for use in the workspace if possible."
+}

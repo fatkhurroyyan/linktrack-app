@@ -4,12 +4,22 @@ from app.config import settings
 
 def get_normalized_database_url(url: str) -> str:
     """
-    Normalizes Supabase / PostgreSQL URLs for asyncpg if standard postgresql:// is provided.
+    Normalizes Supabase / Azure PostgreSQL URLs for asyncpg if standard postgresql:// is provided.
     """
     if url.startswith("postgres://"):
-        return url.replace("postgres://", "postgresql+asyncpg://", 1)
-    if url.startswith("postgresql://") and "+asyncpg" not in url:
-        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    # asyncpg uses 'ssl=' instead of libpq's 'sslmode='
+    if "sslmode=" in url:
+        url = url.replace("sslmode=", "ssl=")
+
+    # Azure Database for PostgreSQL enforces SSL by default
+    if "postgres.database.azure.com" in url and "ssl=" not in url:
+        separator = "&" if "?" in url else "?"
+        url = f"{url}{separator}ssl=require"
+
     return url
 
 db_url = get_normalized_database_url(settings.DATABASE_URL)

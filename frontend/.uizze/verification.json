@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-06",
+  "scope": "Frontend presentation and UI feedback only",
+  "reference": "https://luminux2026.vercel.app/",
+  "guidelines": "https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md",
+  "build": {
+    "command": "npm run build",
+    "directory": "frontend",
+    "result": "passed TypeScript and Vite production build"
+  },
+  "browser": {
+    "engine": "Headless Chrome via Playwright",
+    "data": "Synthetic API responses intercepted in the browser; no live database operations",
+    "viewports": ["1440x1000", "1024x768", "768x1024", "390x844", "360x780", "844x390"],
+    "themes": ["light", "dark"],
+    "coverage": ["single ingestion and URL validation", "duplicate input retention", "batch ingestion", "search and platform filters", "filter reset", "grid and table views", "statistics", "export link construction", "metadata save success and failure", "Drive file list", "category creation and deletion", "nested dialog confirmation", "keyboard focus containment and restoration", "loading skeleton", "empty collection", "empty search", "load error and retry", "theme persistence", "long text"],
+    "finalRegressions": ["Card secondary category clears after refetch", "Dialog secondary category clears after refetch", "Empty batch is disabled and programmatic submission shows focused validation", "Mobile editable controls have computed font size 16px"],
+    "javascriptErrors": 0,
+    "horizontalPageOverflow": false,
+    "axe": {
+      "standards": ["wcag2a", "wcag2aa", "wcag21aa"],
+      "initialStates": 17,
+      "finalStates": 14,
+      "violations": 0
+    }
+  },
+  "lighthouse": {
+    "context": "Local production build with synthetic API fixtures and simulated mobile throttling; not field measurements",
+    "performance": 100,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "seo": 100,
+    "largestContentfulPaintSeconds": 0.9,
+    "totalBlockingTimeMs": 0,
+    "cumulativeLayoutShift": 0
+  },
+  "independentReview": {
+    "disposition": "ship",
+    "scope": "All three findings from the visual review scored resolved in the final verdict pass"
+  },
+  "unchanged": ["src/services/api.ts", "src/types/link.ts", "package.json", "package-lock.json", "all backend and database files"],
+  "limits": ["Live backend integration was not exercised because the backend was unavailable locally", "Physical iOS keyboard and Safari focus zoom were not tested", "Bundled UIZZE detector was unavailable; source scans and axe are separate checks, not an equivalent detector pass"],
+  "deployment": "Not deployed"
+}

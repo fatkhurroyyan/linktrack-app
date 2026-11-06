@@ -26,7 +26,7 @@ try:
         from app.config import settings
         db_url = settings.DATABASE_URL
         return {
-            "db_type": "supabase" if "postgres" in db_url else "sqlite",
+            "db_type": "azure_postgres" if "azure.com" in db_url else ("supabase" if "postgres" in db_url else "sqlite"),
             "db_url_preview": db_url[:35] + "..." if len(db_url) > 35 else db_url,
             "has_env_var": "DATABASE_URL" in os.environ,
         }

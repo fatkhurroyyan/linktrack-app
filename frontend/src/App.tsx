@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
 import { IngestionBar } from './components/IngestionBar';
@@ -17,7 +17,7 @@ import {
   BatchProcessResponse,
   Category,
 } from './types/link';
-import { Layers, RefreshCw, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Library, ArrowUpRight, RefreshCw, AlertCircle, CheckCircle2, AlertTriangle, X, Sparkles } from 'lucide-react';
 
 export const App: React.FC = () => {
   // State
@@ -31,7 +31,27 @@ export const App: React.FC = () => {
     ai_active: false,
   });
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const linkRequest = useRef(0);
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
+  );
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#152c33' : '#edf5f5');
+  }, [theme]);
+
+  const toggleTheme = () => {
+    const next = theme === 'light' ? 'dark' : 'light';
+    setTheme(next);
+    try { localStorage.setItem('linksense-theme', next); } catch { /* Theme still works when storage is unavailable. */ }
+  };
+
+  useEffect(() => () => { clearTimeout(toastTimer.current); }, []);
   const [isProcessing, setIsProcessing] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [showStats, setShowStats] = useState(false);
@@ -44,8 +64,9 @@ export const App: React.FC = () => {
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; message: string } | null>(null);
 
   const showToast = (type: 'success' | 'error' | 'info' | 'warning', message: string, duration: number = 4500) => {
+    clearTimeout(toastTimer.current);
     setToast({ type, message });
-    setTimeout(() => {
+    toastTimer.current = setTimeout(() => {
       setToast(null);
     }, duration);
   };
@@ -64,15 +85,18 @@ export const App: React.FC = () => {
 
   // Fetch Links
   const fetchLinks = useCallback(async () => {
+    const request = ++linkRequest.current;
     setIsLoading(true);
+    setLoadError('');
     try {
       const data = await api.getLinks(filters);
+      if (request !== linkRequest.current) return;
       setLinks(Array.isArray(data?.items) ? data.items : []);
       setTotalCount(typeof data?.total === 'number' ? data.total : 0);
-    } catch (err: any) {
-      console.error('Failed to fetch links:', err);
+    } catch {
+      if (request === linkRequest.current) setLoadError('Koleksi belum dapat dimuat. Periksa koneksi, lalu coba lagi.');
     } finally {
-      setIsLoading(false);
+      if (request === linkRequest.current) setIsLoading(false);
     }
   }, [filters]);
 
@@ -112,16 +136,18 @@ export const App: React.FC = () => {
   }, [fetchCategories]);
 
   useEffect(() => {
-    fetchLinks();
-  }, [fetchLinks]);
+    const timer = setTimeout(() => { void fetchLinks(); }, filters.query ? 250 : 0);
+    return () => { clearTimeout(timer); linkRequest.current += 1; };
+  }, [fetchLinks, filters.query]);
 
   // Handler: Process Single Link
-  const handleProcessLink = async (url: string) => {
+  const handleProcessLink = async (url: string): Promise<boolean> => {
     setIsProcessing(true);
     try {
       const newItem = await api.processLink(url);
       showToast('success', `Berhasil mengurasi: "${newItem.title}"`);
       await Promise.all([fetchLinks(), fetchMetadata(), fetchCategories()]);
+      return true;
     } catch (err: any) {
       const errMsg = err.response?.data?.detail || 'Gagal memproses tautan.';
       const isDuplicate = err.response?.status === 409 || errMsg.toLowerCase().includes('sudah pernah');
@@ -130,6 +156,7 @@ export const App: React.FC = () => {
       } else {
         showToast('error', errMsg);
       }
+      return false;
     } finally {
       setIsProcessing(false);
     }
@@ -174,7 +201,7 @@ export const App: React.FC = () => {
   };
 
   // Handler: Update Link (Optimistic Instant Update without reload)
-  const handleSaveDetail = async (id: string, updated: Partial<LinkItem>) => {
+  const handleSaveDetail = async (id: string, updated: Partial<LinkItem>): Promise<boolean> => {
     const previousLinks = [...links];
 
     // 1. Instantly update local state
@@ -218,10 +245,12 @@ export const App: React.FC = () => {
       // 4. Silently refresh category counters & metadata in background (no reload)
       fetchCategories();
       fetchMetadata();
+      return true;
     } catch (err) {
       // Rollback on failure
       setLinks(previousLinks);
       showToast('error', 'Gagal memperbarui metadata.');
+      return false;
     }
   };
 
@@ -317,155 +346,41 @@ export const App: React.FC = () => {
           'Produktivitas & Tools',
         ];
 
+  const hasFilters = Boolean(filters.query || filters.platform !== 'All' || filters.category !== 'All' || filters.tag);
+  const resetFilters = () => setFilters((previous) => ({ ...previous, query: '', platform: 'All', category: 'All', tag: '', page: 1 }));
+
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-brand-500/30 selection:text-brand-200">
-      {/* Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-md animate-in fade-in slide-in-from-bottom-5 duration-300">
-          <div
-            className={`flex items-start gap-2.5 px-4 py-3 rounded-xl shadow-2xl border text-xs font-medium ${
-              toast.type === 'success'
-                ? 'bg-emerald-950/90 text-emerald-200 border-emerald-500/40 shadow-emerald-500/10'
-                : toast.type === 'warning'
-                ? 'bg-amber-950/90 text-amber-200 border-amber-500/40 shadow-amber-500/10'
-                : toast.type === 'error'
-                ? 'bg-red-950/90 text-red-200 border-red-500/40 shadow-red-500/10'
-                : 'bg-slate-900/90 text-slate-200 border-slate-700 shadow-slate-500/10'
-            } backdrop-blur-md`}
-          >
-            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />}
-            {toast.type === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />}
-            {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />}
-            <span className="leading-relaxed">{toast.message}</span>
-          </div>
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">Lewati ke konten utama</a>
+      <div className="toast-region" aria-live="polite" aria-atomic="true">
+        {toast && <div className={`toast toast-${toast.type}`}>
+          {toast.type === 'success' ? <CheckCircle2 size={20} aria-hidden="true" /> : toast.type === 'warning' ? <AlertTriangle size={20} aria-hidden="true" /> : <AlertCircle size={20} aria-hidden="true" />}
+          <span>{toast.message}</span><button className="icon-button" onClick={() => setToast(null)} aria-label="Tutup notifikasi"><X size={16} aria-hidden="true" /></button>
+        </div>}
+      </div>
+      <Navbar onOpenBatch={() => setIsBatchOpen(true)} onToggleStats={() => setShowStats(!showStats)} showStats={showStats} aiActive={health.ai_active} modelName={health.gemini_model} theme={theme} onToggleTheme={toggleTheme} />
+      <main id="main-content" className="main-content" tabIndex={-1}>
+        <HeroSection stats={stats} onSelectPlatform={handleSelectPlatform} activePlatform={filters.platform}>
+          <IngestionBar onProcess={handleProcessLink} isLoading={isProcessing} />
+        </HeroSection>
+        {showStats && <StatsOverview stats={stats} onSelectCategory={handleSelectCategory} onSelectTag={handleSelectTag} onClose={() => setShowStats(false)} />}
+        <FilterBar filters={filters} onFilterChange={handleFilterChange} categories={categoriesList} totalCount={totalCount} viewMode={viewMode} onViewModeChange={setViewMode} activeTag={filters.tag} onClearTag={handleClearTag} onOpenManageCategories={() => setIsCategoryModalOpen(true)} />
+        <div aria-busy={isLoading} className="collection-results">
+          {isLoading ? (
+            <div className="page-width"><span className="sr-only" role="status">Memuat basis pengetahuan…</span><div className="collection-grid skeleton-grid" aria-hidden="true">{Array.from({ length: 6 }, (_, index) => <div className="card-skeleton" key={index}><div className="skeleton-source"><span /><span /></div><div className="skeleton-line skeleton-title" /><div className="skeleton-line" /><div className="skeleton-line" /><div className="skeleton-line skeleton-short" /><div className="skeleton-footer" /></div>)}</div></div>
+          ) : loadError ? (
+            <div className="page-width"><div className="collection-state error-state" role="alert"><span className="empty-icon"><AlertCircle size={30} aria-hidden="true" /></span><h2>Koleksi belum terhubung</h2><p>{loadError}</p><button className="button button-outline" onClick={() => void fetchLinks()}><RefreshCw size={16} aria-hidden="true" />Coba Lagi</button></div></div>
+          ) : links.length === 0 ? (
+            <div className="page-width"><div className="collection-state"><span className="empty-icon"><Library size={32} aria-hidden="true" /></span><h2>{hasFilters ? 'Belum menemukan yang kamu cari?' : 'Tempat untuk ide pertamamu.'}</h2><p>{hasFilters ? 'Coba kata kunci lain atau hapus filter untuk melihat seluruh koleksi.' : 'Mulai dengan tautan Google Drive, repositori GitHub, atau artikel yang ingin kamu simpan.'}</p>{hasFilters ? <button className="button button-outline" onClick={resetFilters}>Hapus Semua Filter</button> : <button className="button button-primary" onClick={() => document.getElementById('link-url')?.focus()}><Sparkles size={16} aria-hidden="true" />Simpan Tautan<ArrowUpRight size={16} aria-hidden="true" /></button>}</div></div>
+          ) : viewMode === 'grid' ? (
+            <div className="page-width"><div className="collection-grid">{links.map((item) => <LinkCard key={item.id} item={item} categoriesList={categoriesList} onSelectTag={handleSelectTag} onOpenDetail={handleOpenDetail} onDelete={handleDeleteLink} onUpdateLink={handleSaveDetail} />)}</div><p className="collection-end">{links.length < totalCount ? `Menampilkan ${new Intl.NumberFormat('id-ID').format(links.length)} dari ${new Intl.NumberFormat('id-ID').format(totalCount)} tautan. Gunakan pencarian atau filter untuk mempersempit koleksi.` : 'Semua referensi ini, siap kamu temukan kembali.'}</p></div>
+          ) : <LinkTable items={links} onSelectTag={handleSelectTag} onOpenDetail={handleOpenDetail} onDelete={handleDeleteLink} />}
         </div>
-      )}
-
-      {/* Navbar */}
-      <Navbar
-        onOpenBatch={() => setIsBatchOpen(true)}
-        onToggleStats={() => setShowStats(!showStats)}
-        showStats={showStats}
-        aiActive={health.ai_active}
-        modelName={health.gemini_model}
-      />
-
-      {/* Main Content */}
-      <main className="flex-1 pb-16">
-        {/* Hero Section */}
-        <HeroSection
-          stats={stats}
-          onSelectPlatform={handleSelectPlatform}
-          activePlatform={filters.platform}
-        />
-
-        {/* URL Ingestion Bar */}
-        <IngestionBar
-          onProcess={handleProcessLink}
-          isLoading={isProcessing}
-        />
-
-        {/* Collapsible Stats Overview Drawer */}
-        {showStats && (
-          <StatsOverview
-            stats={stats}
-            onSelectCategory={handleSelectCategory}
-            onSelectTag={handleSelectTag}
-            onClose={() => setShowStats(false)}
-          />
-        )}
-
-        {/* Filter and Control Bar */}
-        <FilterBar
-          filters={filters}
-          onFilterChange={handleFilterChange}
-          categories={categoriesList}
-          totalCount={totalCount}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          activeTag={filters.tag}
-          onClearTag={handleClearTag}
-          onOpenManageCategories={() => setIsCategoryModalOpen(true)}
-        />
-
-        {/* Content Listing */}
-        {isLoading ? (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center space-y-3">
-            <RefreshCw className="w-8 h-8 text-brand-400 animate-spin mx-auto" />
-            <p className="text-sm text-slate-400">Memuat basis pengetahuan...</p>
-          </div>
-        ) : links.length === 0 ? (
-          <div className="max-w-md mx-auto px-4 py-16 text-center space-y-4">
-            <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto text-slate-600">
-              <Layers className="w-8 h-8" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-white">Tidak Ada Tautan Ditemukan</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                {filters.query || filters.platform !== 'All' || filters.category !== 'All' || filters.tag
-                  ? 'Tidak ada hasil yang sesuai dengan kriteria filter saat ini.'
-                  : 'Mulai dengan menempelkan URL Google Drive, GitHub repo, atau link web di atas.'}
-              </p>
-            </div>
-          </div>
-        ) : viewMode === 'grid' ? (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {links.map((item) => (
-                <LinkCard
-                  key={item.id}
-                  item={item}
-                  categoriesList={categoriesList}
-                  onSelectTag={handleSelectTag}
-                  onOpenDetail={handleOpenDetail}
-                  onDelete={handleDeleteLink}
-                  onUpdateLink={handleSaveDetail}
-                />
-              ))}
-            </div>
-          </div>
-        ) : (
-          <LinkTable
-            items={links}
-            onSelectTag={handleSelectTag}
-            onOpenDetail={handleOpenDetail}
-            onDelete={handleDeleteLink}
-          />
-        )}
       </main>
-
-      {/* Batch Ingestion Modal */}
-      <BatchIngestionModal
-        isOpen={isBatchOpen}
-        onClose={() => setIsBatchOpen(false)}
-        onProcessBatch={handleProcessBatch}
-        isLoading={isProcessing}
-      />
-
-      {/* Category Management Modal */}
-      <CategoryManageModal
-        isOpen={isCategoryModalOpen}
-        onClose={() => setIsCategoryModalOpen(false)}
-        categories={categories}
-        onCreateCategory={handleCreateCategory}
-        onDeleteCategory={handleDeleteCategory}
-      />
-
-      {/* Detail & Edit Modal */}
-      <DetailModal
-        item={selectedItem}
-        isOpen={isDetailOpen}
-        categoriesList={categoriesList}
-        onClose={() => setIsDetailOpen(false)}
-        onSave={handleSaveDetail}
-      />
-
-      {/* Footer */}
-      <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-600 bg-slate-950">
-        <p>
-          LinkSense AI &copy; 2026. Powered by Google Gemini &amp; Multi-Platform Universal Scraper.
-        </p>
-      </footer>
+      <BatchIngestionModal isOpen={isBatchOpen} onClose={() => setIsBatchOpen(false)} onProcessBatch={handleProcessBatch} isLoading={isProcessing} />
+      <CategoryManageModal isOpen={isCategoryModalOpen} onClose={() => setIsCategoryModalOpen(false)} categories={categories} onCreateCategory={handleCreateCategory} onDeleteCategory={handleDeleteCategory} />
+      <DetailModal item={selectedItem} isOpen={isDetailOpen} categoriesList={categoriesList} onClose={() => setIsDetailOpen(false)} onSave={handleSaveDetail} />
+      <footer className="site-footer"><div className="page-width"><span className="footer-brand"><Sparkles size={17} aria-hidden="true" />LinkSense AI</span><p>LinkSense AI &copy; 2026. Powered by Google Gemini &amp; Multi-Platform Universal Scraper.</p><a href="#main-content">Kembali ke atas<ArrowUpRight size={14} aria-hidden="true" /></a></div></footer>
     </div>
   );
 };

@@ -1,90 +1,40 @@
 import React from 'react';
-import { HardDrive, Github, Globe } from 'lucide-react';
+import { HardDrive, Github, Globe, Library } from 'lucide-react';
 import { AnalyticsStats } from '../types/link';
 
 interface HeroSectionProps {
   stats: AnalyticsStats | null;
   onSelectPlatform: (platform: string) => void;
   activePlatform: string;
+  children?: React.ReactNode;
 }
 
-export const HeroSection: React.FC<HeroSectionProps> = ({
-  stats,
-  onSelectPlatform,
-  activePlatform,
-}) => {
-  const gdriveCount = stats?.platform_counts?.['Google Drive'] || 0;
-  const githubCount = stats?.platform_counts?.['GitHub'] || 0;
-  const webCount = stats?.platform_counts?.['Web'] || 0;
-  const totalCount = stats?.total_links || 0;
+const sources = [
+  { value: 'All', label: 'Semua Tautan', icon: Library },
+  { value: 'Google Drive', label: 'Google Drive', icon: HardDrive },
+  { value: 'GitHub', label: 'GitHub Repos', icon: Github },
+  { value: 'Web', label: 'Situs Web & Artikel', icon: Globe },
+];
 
-  return (
-    <div className="relative pt-6 pb-4 overflow-hidden">
-      {/* Background Glow Decorations */}
-      <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-1/2 right-1/4 -translate-y-1/2 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-
-
-        {/* Quick Platform Statistics Pills */}
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <button
-            onClick={() => onSelectPlatform('All')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${activePlatform === 'All'
-                ? 'bg-slate-800 text-white border border-slate-600 shadow-md'
-                : 'bg-slate-900/70 text-slate-400 hover:text-slate-200 border border-slate-800/80 hover:bg-slate-800/50'
-              }`}
-          >
-            <span>Semua Tautan</span>
-            <span className="px-2 py-0.5 rounded-full bg-slate-750 text-slate-200 text-[11px] font-mono">
-              {totalCount}
-            </span>
-          </button>
-
-          <button
-            onClick={() => onSelectPlatform('Google Drive')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${activePlatform === 'Google Drive'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-glow'
-                : 'bg-slate-900/70 text-slate-400 hover:text-amber-300 border border-slate-800/80 hover:bg-slate-800/50'
-              }`}
-          >
-            <HardDrive className="w-4 h-4 text-amber-400" />
-            <span>Google Drive</span>
-            <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 text-[11px] font-mono border border-amber-500/20">
-              {gdriveCount}
-            </span>
-          </button>
-
-          <button
-            onClick={() => onSelectPlatform('GitHub')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${activePlatform === 'GitHub'
-                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-glow'
-                : 'bg-slate-900/70 text-slate-400 hover:text-purple-300 border border-slate-800/80 hover:bg-slate-800/50'
-              }`}
-          >
-            <Github className="w-4 h-4 text-purple-400" />
-            <span>GitHub Repos</span>
-            <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-300 text-[11px] font-mono border border-purple-500/20">
-              {githubCount}
-            </span>
-          </button>
-
-          <button
-            onClick={() => onSelectPlatform('Web')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${activePlatform === 'Web'
-                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-glow'
-                : 'bg-slate-900/70 text-slate-400 hover:text-blue-300 border border-slate-800/80 hover:bg-slate-800/50'
-              }`}
-          >
-            <Globe className="w-4 h-4 text-blue-400" />
-            <span>Situs Web & Artikel</span>
-            <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-300 text-[11px] font-mono border border-blue-500/20">
-              {webCount}
-            </span>
-          </button>
-        </div>
+export const HeroSection: React.FC<HeroSectionProps> = ({ stats, onSelectPlatform, activePlatform, children }) => (
+  <section className="page-width workspace-intro" aria-labelledby="workspace-title">
+    <div className="intro-panel">
+      <div className="intro-content">
+        <h1 id="workspace-title">Tautan tersimpan.<br /><span>Ide tetap terhubung.</span></h1>
+        <p className="intro-description">Satu tempat untuk referensi, repositori, dan inspirasi.<br className="desktop-break" /> Simpan tautannya, biarkan AI merapikannya.</p>
+        {children}
+      </div>
+      <div className="intro-art" aria-hidden="true">
+        <img src="/images/library-companion.webp" alt="" width="360" height="360" fetchPriority="high" />
       </div>
     </div>
-  );
-};
+    <div className="source-tabs" role="group" aria-label="Filter berdasarkan platform">
+      {sources.map(({ value, label, icon: Icon }) => (
+        <button key={value} className={`source-tab ${activePlatform === value ? 'is-selected' : ''}`} aria-pressed={activePlatform === value} onClick={() => onSelectPlatform(value)}>
+          <Icon size={18} aria-hidden="true" /><span>{label}</span>
+          <span className="source-count">{stats ? new Intl.NumberFormat('id-ID').format(value === 'All' ? stats.total_links : stats.platform_counts?.[value] ?? 0) : '…'}</span>
+        </button>
+      ))}
+    </div>
+  </section>
+);

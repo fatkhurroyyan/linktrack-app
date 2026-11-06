@@ -1,20 +1,11 @@
 import React from 'react';
-import {
-  Search,
-  X,
-  LayoutGrid,
-  Table as TableIcon,
-  ArrowUpDown,
-  Tag,
-  Filter,
-  SlidersHorizontal,
-} from 'lucide-react';
+import { Search, X, LayoutGrid, List, ArrowDownWideNarrow, SlidersHorizontal, Tag, ChevronDown } from 'lucide-react';
 import { FilterState } from '../types/link';
 import { ExportDropdown } from './ExportDropdown';
 
 interface FilterBarProps {
   filters: FilterState;
-  onFilterChange: (newFilters: Partial<FilterState>) => void;
+  onFilterChange: (filters: Partial<FilterState>) => void;
   categories: string[];
   totalCount: number;
   viewMode: 'grid' | 'table';
@@ -24,135 +15,41 @@ interface FilterBarProps {
   onOpenManageCategories?: () => void;
 }
 
-export const FilterBar: React.FC<FilterBarProps> = ({
-  filters,
-  onFilterChange,
-  categories,
-  totalCount,
-  viewMode,
-  onViewModeChange,
-  activeTag,
-  onClearTag,
-  onOpenManageCategories,
-}) => {
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6 space-y-3">
-      {/* Top Filter Bar: Search, Category, Sort, Export, View Toggle */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-slate-900/80 p-3 rounded-2xl border border-slate-800 shadow-sm">
-        {/* Left: Search Input Box */}
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            value={filters.query}
-            onChange={(e) => onFilterChange({ query: e.target.value, page: 1 })}
-            placeholder="Cari tautan, kata kunci, kategori, atau tag..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500/60"
-          />
-          {filters.query && (
-            <button
-              onClick={() => onFilterChange({ query: '', page: 1 })}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
+export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange, categories, totalCount, viewMode, onViewModeChange, activeTag, onClearTag, onOpenManageCategories }) => (
+  <div className="page-width collection-controls" id="collection">
+    <div className="collection-heading">
+      <div className="collection-title"><h2>Koleksi tautanmu</h2><span className="result-count" aria-live="polite">{new Intl.NumberFormat('id-ID').format(totalCount)} tautan</span></div>
+      <button className="text-button" onClick={onOpenManageCategories}><SlidersHorizontal size={15} aria-hidden="true" />Kelola Kategori</button>
+    </div>
+    <div className="filter-toolbar">
+      <div className="search-field">
+        <Search size={18} aria-hidden="true" /><label htmlFor="collection-search" className="sr-only">Cari tautan</label>
+        <input id="collection-search" name="query" type="search" autoComplete="off" value={filters.query} onChange={(event) => onFilterChange({ query: event.target.value, page: 1 })} placeholder="Cari judul, kata kunci, atau tag…" />
+        {filters.query && <button className="icon-button" onClick={() => onFilterChange({ query: '', page: 1 })} aria-label="Hapus pencarian"><X size={16} aria-hidden="true" /></button>}
+      </div>
+      <div className="filter-options">
+        <div className="select-field category-filter">
+          <label htmlFor="category-filter" className="sr-only">Filter kategori</label>
+          <select id="category-filter" name="category" value={filters.category} onChange={(event) => onFilterChange({ category: event.target.value, page: 1 })}>
+            <option value="All">Semua Kategori</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}
+          </select><ChevronDown size={15} aria-hidden="true" />
         </div>
-
-        {/* Middle: Category Dropdown & Manage Categories Button */}
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-          <div className="relative flex-1 sm:flex-none">
-            <select
-              value={filters.category}
-              onChange={(e) => onFilterChange({ category: e.target.value, page: 1 })}
-              className="w-full sm:w-auto appearance-none bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 pr-8 text-xs text-slate-200 focus:outline-none focus:border-brand-500/60 cursor-pointer"
-            >
-              <option value="All">Semua Kategori</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-            <Filter className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
-          </div>
-
-          {onOpenManageCategories && (
-            <button
-              onClick={onOpenManageCategories}
-              className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-brand-300 text-xs font-medium transition-colors flex-shrink-0"
-              title="Kelola Kategori (Tambah & Hapus)"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Kelola Kategori</span>
-            </button>
-          )}
-
-          {/* Sort By Dropdown */}
-          <div className="relative flex-1 sm:flex-none">
-            <select
-              value={`${filters.sortBy}-${filters.sortOrder}`}
-              onChange={(e) => {
-                const [sortBy, sortOrder] = e.target.value.split('-') as [any, any];
-                onFilterChange({ sortBy, sortOrder, page: 1 });
-              }}
-              className="w-full sm:w-auto appearance-none bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 pr-8 text-xs text-slate-200 focus:outline-none focus:border-brand-500/60 cursor-pointer"
-            >
-              <option value="created_at-desc">Terbaru</option>
-              <option value="created_at-asc">Terlama</option>
-              <option value="title-asc">Judul (A-Z)</option>
-              <option value="title-desc">Judul (Z-A)</option>
-              <option value="platform-asc">Platform (A-Z)</option>
-            </select>
-            <ArrowUpDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
-          </div>
+        <div className="select-field sort-filter">
+          <ArrowDownWideNarrow size={15} aria-hidden="true" /><label htmlFor="sort-filter" className="sr-only">Urutkan tautan</label>
+          <select id="sort-filter" name="sort" value={`${filters.sortBy}-${filters.sortOrder}`} onChange={(event) => {
+            const [sortBy, sortOrder] = event.target.value.split('-') as [FilterState['sortBy'], FilterState['sortOrder']];
+            onFilterChange({ sortBy, sortOrder, page: 1 });
+          }}>
+            <option value="created_at-desc">Terbaru</option><option value="created_at-asc">Terlama</option><option value="title-asc">Judul (A-Z)</option><option value="title-desc">Judul (Z-A)</option><option value="platform-asc">Platform (A-Z)</option>
+          </select><ChevronDown size={15} aria-hidden="true" />
         </div>
-
-        {/* Right Actions: Export & View Toggle */}
-        <div className="flex items-center justify-between sm:justify-end gap-2 border-t md:border-t-0 pt-2 md:pt-0 border-slate-800">
-          <ExportDropdown filters={filters} totalCount={totalCount} />
-
-          {/* View Mode Toggle */}
-          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
-            <button
-              onClick={() => onViewModeChange('grid')}
-              className={`p-1.5 rounded-lg transition-colors ${
-                viewMode === 'grid'
-                  ? 'bg-slate-800 text-brand-400 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-300'
-              }`}
-              title="Grid Card View"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => onViewModeChange('table')}
-              className={`p-1.5 rounded-lg transition-colors ${
-                viewMode === 'table'
-                  ? 'bg-slate-800 text-brand-400 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-300'
-              }`}
-              title="Data Table View"
-            >
-              <TableIcon className="w-4 h-4" />
-            </button>
-          </div>
+        <ExportDropdown filters={filters} totalCount={totalCount} />
+        <div className="view-switch" role="group" aria-label="Tampilan koleksi">
+          <button className={`icon-button ${viewMode === 'grid' ? 'is-selected' : ''}`} aria-label="Tampilan kartu" aria-pressed={viewMode === 'grid'} onClick={() => onViewModeChange('grid')}><LayoutGrid size={17} aria-hidden="true" /></button>
+          <button className={`icon-button ${viewMode === 'table' ? 'is-selected' : ''}`} aria-label="Tampilan tabel" aria-pressed={viewMode === 'table'} onClick={() => onViewModeChange('table')}><List size={18} aria-hidden="true" /></button>
         </div>
       </div>
-
-      {/* Active Tag Pill Filter Indicator */}
-      {activeTag && (
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-slate-400">Filter Tag Aktif:</span>
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-500/10 text-brand-400 border border-brand-500/20 font-medium">
-            <Tag className="w-3 h-3" />
-            <span>#{activeTag}</span>
-            <button onClick={onClearTag} className="hover:text-white ml-1">
-              <X className="w-3 h-3" />
-            </button>
-          </span>
-        </div>
-      )}
     </div>
-  );
-};
+    {activeTag && <div className="active-filter"><Tag size={14} aria-hidden="true" /><span>Tag: <strong>#{activeTag}</strong></span><button className="icon-button" onClick={onClearTag} aria-label={`Hapus filter tag ${activeTag}`}><X size={14} aria-hidden="true" /></button></div>}
+  </div>
+);
